@@ -198,10 +198,10 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
   ];
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled || page !== "home" ? "bg-[#FAF7F2]/95 backdrop-blur-sm shadow-sm" : "bg-transparent"}`}>
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled || page !== "home" ? "bg-[#FAF7F2]/95 backdrop-blur-sm shadow-sm" : "bg-gradient-to-b from-black/50 to-transparent"}`}>
       <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
         <button onClick={() => setPage("home")} className="flex flex-col leading-none">
-          <span className="text-xl font-bold tracking-tight" style={{ fontFamily: "var(--font-display)" }}>
+          <span className={`text-xl font-bold tracking-tight transition-colors ${!scrolled && page === "home" ? "text-white" : "text-[#1A1A18]"}`} style={{ fontFamily: "var(--font-display)" }}>
             Anty Sala
           </span>
           <span className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>
@@ -212,7 +212,7 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
         <nav className="hidden md:flex items-center gap-8">
           {links.map(l => (
             <button key={l.page} onClick={() => setPage(l.page)}
-              className={`text-sm tracking-wide transition-colors hover:text-[#C4562A] ${page === l.page ? "text-[#C4562A]" : "text-[#1A1A18]"}`}
+              className={`text-sm tracking-wide transition-colors hover:text-[#C4562A] ${page === l.page ? "text-[#C4562A]" : scrolled || page !== "home" ? "text-[#1A1A18]" : "text-white"}`}
               style={{ fontFamily: "var(--font-body)" }}>
               {l.label}
             </button>
@@ -220,10 +220,10 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
         </nav>
 
         <div className="flex items-center gap-4">
-          <button onClick={() => setPage("account")} className="hidden md:flex p-2 hover:text-[#C4562A] transition-colors" aria-label="Account">
+          <button onClick={() => setPage("account")} className={`hidden md:flex p-2 hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label="Account">
             <User size={20} />
           </button>
-          <button onClick={() => setPage("cart")} className="relative p-2 hover:text-[#C4562A] transition-colors" aria-label="Cart">
+          <button onClick={() => setPage("cart")} className={`relative p-2 hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label="Cart">
             <ShoppingCart size={20} />
             {cartCount > 0 && (
               <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#C4562A] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
@@ -379,9 +379,9 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {featured.map(p => (
-            <button key={p.id} onClick={() => setPage(`product-${p.id}`)}
-              className="group text-left bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-              <div className="relative overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}>
+            <div key={p.id} className="group text-left bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
+              <div className="relative overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}
+                onClick={() => setPage(`product-${p.id}`)}>
                 <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 {p.badge && (
                   <span className="absolute top-3 left-3 bg-[#C4562A] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">
@@ -394,12 +394,12 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
                   Add to Cart
                 </button>
               </div>
-              <div className="p-4">
+              <div className="p-4" onClick={() => setPage(`product-${p.id}`)}>
                 <p className="text-xs text-[#B8922A] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
                 <p className="font-semibold text-sm mb-1" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
                 <p className="text-[#C4562A] font-bold text-sm">{ghs(p.price)}</p>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       </section>
