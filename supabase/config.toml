@@ -1,0 +1,11 @@
+project_id = "aunty-sala-fashion-gh"
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[functions.paystack-webhook]
+verify_jwt = false
+
+[functions.notification-dispatch]
+verify_jwt = false

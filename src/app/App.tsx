@@ -1,4 +1,47 @@
-import { useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState, type FormEvent } from "react";
+import type { Session } from "@supabase/supabase-js";
+import {
+  getProducts,
+  getStoreContent,
+  getAccountData,
+  getAdminData,
+  getCheckoutQuote,
+  initializePaystackCheckout,
+  verifyPaystackPayment,
+  submitContactMessage,
+  submitCustomOrder,
+  updateCustomOrderStatus,
+  createProduct,
+  createCategory,
+  updateProduct,
+  archiveProduct,
+  restoreProduct,
+  updateOrderStatus,
+  saveStoreSettings,
+  addAdminUserByEmail,
+  setAdminUserAccess,
+  saveSiteMedia,
+  addGalleryMedia,
+  removeAdminMedia,
+  getWishlistProductIds,
+  addWishlistItem,
+  removeWishlistItem,
+  getSavedAddresses,
+  addSavedAddress,
+  updateSavedAddress,
+  saveMeasurements,
+  subscribeToNewsletter,
+  dispatchNotifications,
+  type AccountData,
+  type AdminData,
+  type GalleryItem,
+  type StoreProduct,
+  type Testimonial,
+  type SavedAddress,
+  type CheckoutQuote,
+} from "../lib/store-api";
+import { uploadManyToCloudinary, type CloudinaryAsset } from "../lib/cloudinary";
+import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import {
   ShoppingCart, Menu, X, Star, Heart, Search, Package, Users,
   BarChart2, Settings, ShoppingBag, Scissors, MessageCircle,
@@ -14,142 +57,203 @@ import {
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
 } from "recharts";
 
-// ─── Image URLs ────────────────────────────────────────────────────────────
-const IMG = {
-  hero1: "https://images.unsplash.com/photo-1533659828870-95ee305cee3e?w=1400&h=900&fit=crop&auto=format",
-  model1: "https://images.unsplash.com/photo-1730140322846-e6be13da2ce1?w=600&h=800&fit=crop&auto=format",
-  model2: "https://images.unsplash.com/photo-1562894369-193bedce28e3?w=600&h=800&fit=crop&auto=format",
-  model3: "https://images.unsplash.com/photo-1769650795527-a707e63754a0?w=600&h=800&fit=crop&auto=format",
-  model4: "https://images.unsplash.com/photo-1769650795970-89690d0f535a?w=600&h=800&fit=crop&auto=format",
-  model5: "https://images.unsplash.com/photo-1761574028030-6d42536b9b12?w=600&h=800&fit=crop&auto=format",
-  model6: "https://images.unsplash.com/photo-1775259037868-1237ddc37bf5?w=600&h=800&fit=crop&auto=format",
-  fabric1: "https://images.unsplash.com/photo-1552710307-537199cd41c0?w=600&h=400&fit=crop&auto=format",
-  fabric2: "https://images.unsplash.com/photo-1578509566163-068acd11b8e7?w=600&h=400&fit=crop&auto=format",
-  fabric3: "https://images.unsplash.com/photo-1768212566108-4ce4f329e4d2?w=600&h=400&fit=crop&auto=format",
-  fabric4: "https://images.unsplash.com/photo-1655682614757-a9a33fa45c93?w=600&h=400&fit=crop&auto=format",
-  sewing: "https://images.unsplash.com/photo-1687422808289-e721259c9eb4?w=800&h=600&fit=crop&auto=format",
-  workshop: "https://images.unsplash.com/photo-1612353318597-702ae55258cb?w=800&h=600&fit=crop&auto=format",
-};
-
 // ─── Data ──────────────────────────────────────────────────────────────────
-interface Product {
-  id: number; name: string; price: number; originalPrice?: number;
-  fabric: string; category: string; sizes: string[]; colors: string[];
-  images: string[]; description: string; inStock: boolean; badge?: string;
-}
+type Product = StoreProduct;
 
-const PRODUCTS: Product[] = [
-  { id: 1, name: "Adwoa Midi Dress", price: 480, fabric: "Ankara", category: "Dresses",
-    sizes: ["XS","S","M","L","XL"], colors: ["#C4562A","#1A1A18","#B8922A"],
-    images: [IMG.model1, IMG.fabric1, IMG.model3],
-    description: "A structured midi silhouette in vibrant Ankara print. Designed with a fitted bodice, flutter sleeves, and a flared skirt that moves beautifully. Fully lined, hidden zip at back.",
-    inStock: true, badge: "Bestseller" },
-  { id: 2, name: "Efua Wrap Gown", price: 620, fabric: "Kente", category: "Gowns",
-    sizes: ["S","M","L","XL"], colors: ["#7A3B2E","#2C4A3E","#B8922A"],
-    images: [IMG.model2, IMG.fabric2, IMG.model4],
-    description: "A floor-length wrap gown woven from authentic Kente cloth. The asymmetric neckline and draped skirt create an effortlessly elegant silhouette for formal occasions.",
-    inStock: true, badge: "New" },
-  { id: 3, name: "Abena Peplum Top", price: 280, fabric: "Batik", category: "Tops",
-    sizes: ["XS","S","M","L"], colors: ["#C4562A","#FAF7F2","#1A1A18"],
-    images: [IMG.model3, IMG.fabric3, IMG.model5],
-    description: "A statement peplum top in hand-dyed batik fabric. The voluminous peplum hem and off-shoulder cut make this a versatile piece for any occasion.",
-    inStock: true },
-  { id: 4, name: "Akosua Maxi Skirt", price: 360, originalPrice: 420, fabric: "Ankara",
-    category: "Skirts", sizes: ["XS","S","M","L","XL","XXL"],
-    colors: ["#4A3728","#C4562A","#7A8C6E"],
-    images: [IMG.model4, IMG.fabric1, IMG.model6],
-    description: "A sweeping maxi skirt in bold Ankara print. Elasticated waist for a perfect fit across all sizes. The tiered hem adds movement and drama.",
-    inStock: true, badge: "Sale" },
-  { id: 5, name: "Ama Shift Dress", price: 520, fabric: "Kente", category: "Dresses",
-    sizes: ["S","M","L"], colors: ["#B8922A","#1A1A18","#C4562A"],
-    images: [IMG.model5, IMG.fabric2, IMG.model1],
-    description: "A refined shift dress in woven Kente cloth. Knee-length with a boat neckline and structured shoulders — a modern take on traditional Ghanaian weaving.",
-    inStock: true },
-  { id: 6, name: "Yaa Co-ord Set", price: 580, fabric: "Batik", category: "Sets",
-    sizes: ["XS","S","M","L","XL"], colors: ["#2C4A3E","#C4562A","#FAF7F2"],
-    images: [IMG.model6, IMG.fabric4, IMG.model2],
-    description: "A matching top and wide-leg trouser set in rich indigo batik. The coordinated print creates a striking full look that transitions effortlessly from day to evening.",
-    inStock: false, badge: "Pre-order" },
-  { id: 7, name: "Adjoa Evening Gown", price: 890, fabric: "Ankara", category: "Gowns",
-    sizes: ["S","M","L","XL"], colors: ["#1A1A18","#C4562A","#B8922A"],
-    images: [IMG.model3, IMG.fabric3, IMG.model5],
-    description: "Our signature floor-length gown in exclusive Ankara print. Strapless fitted bodice with a dramatic train. Available for custom measurements.",
-    inStock: true, badge: "Exclusive" },
-  { id: 8, name: "Serwaa Jumpsuit", price: 440, fabric: "Batik", category: "Jumpsuits",
-    sizes: ["XS","S","M","L"], colors: ["#C4562A","#7A3B2E","#FAF7F2"],
-    images: [IMG.model4, IMG.fabric4, IMG.model6],
-    description: "A tailored wide-leg jumpsuit in hand-waxed batik. Deep V-neckline, cinched waist with a self-tie belt, and wide palazzo legs for a statement silhouette.",
-    inStock: true },
-];
-
-const TESTIMONIALS = [
-  { name: "Akosua Mensah", location: "Accra, Ghana", rating: 5,
-    text: "The Efua Wrap Gown I ordered was absolutely stunning. The attention to detail in the stitching and the way the Kente cloth was handled shows real mastery. I wore it to my cousin's wedding and received so many compliments." },
-  { name: "Ama Asante", location: "London, UK", rating: 5,
-    text: "I commissioned a custom wedding guest outfit and Anty Sala exceeded every expectation. They took my measurements remotely and the fit was absolutely perfect. The fabric choices are exceptional quality." },
-  { name: "Efua Darko", location: "Toronto, Canada", rating: 5,
-    text: "As a Ghanaian living abroad, finding quality African fashion that actually fits well has always been a struggle. Anty Sala solves that completely. The made-to-measure service is a game changer." },
-];
-
-const GALLERY_IMGS = [IMG.model1, IMG.model2, IMG.model3, IMG.model4, IMG.fabric1, IMG.fabric2, IMG.model5, IMG.model6];
-
-// Admin data
-const SALES_DATA = [
-  { month: "Feb", revenue: 8200, orders: 34 }, { month: "Mar", revenue: 11400, orders: 48 },
-  { month: "Apr", revenue: 9800, orders: 41 }, { month: "May", revenue: 14200, orders: 59 },
-  { month: "Jun", revenue: 16800, orders: 71 }, { month: "Jul", revenue: 13600, orders: 57 },
-];
-const CATEGORY_DATA = [
-  { name: "Dresses", value: 38 }, { name: "Gowns", value: 24 },
-  { name: "Sets", value: 18 }, { name: "Skirts", value: 12 }, { name: "Other", value: 8 },
-];
+const ProductsContext = createContext<Product[]>([]);
+const useProducts = () => useContext(ProductsContext);
+const WishlistContext = createContext<{ ids: string[]; toggle: (productId: string) => Promise<void>; isAuthenticated: boolean }>({ ids: [], toggle: async () => {}, isAuthenticated: false });
+const useWishlist = () => useContext(WishlistContext);
+const StoreContentContext = createContext<{ testimonials: Testimonial[]; gallery: GalleryItem[]; settings: Record<string, unknown>; siteMedia: Record<string, string> }>({ testimonials: [], gallery: [], settings: {}, siteMedia: {} });
+const useStoreContent = () => useContext(StoreContentContext);
+const EMPTY_ADMIN_DATA: AdminData = { orders: [], customers: [], tailoringItems: [], salesData: [], categoryData: [], categories: [], products: [], media: [], notifications: [], settings: {}, users: [] };
+type AdminDataContextValue = AdminData & { refresh: () => Promise<void> };
+const AdminDataContext = createContext<AdminDataContextValue>({ ...EMPTY_ADMIN_DATA, refresh: async () => {} });
+const useAdminData = () => useContext(AdminDataContext);
 const PIE_COLORS = ["#C4562A","#B8922A","#7A8C6E","#4A6B8A","#8B5E3C"];
-
-const ORDERS_DATA = [
-  { id: "#ASF-1041", customer: "Abena Owusu", items: "Adwoa Midi Dress × 1", amount: 480, status: "Shipped", date: "Jul 10, 2026", fabric: "Ankara" },
-  { id: "#ASF-1040", customer: "Yaa Boateng", items: "Efua Wrap Gown × 1", amount: 620, status: "Sewing", date: "Jul 9, 2026", fabric: "Kente", custom: true },
-  { id: "#ASF-1039", customer: "Adjoa Kumi", items: "Yaa Co-ord Set × 1, Abena Peplum Top × 2", amount: 1140, status: "Processing", date: "Jul 9, 2026", fabric: "Batik" },
-  { id: "#ASF-1038", customer: "Akua Asante", items: "Adjoa Evening Gown × 1", amount: 890, status: "Ready", date: "Jul 8, 2026", fabric: "Ankara", custom: true },
-  { id: "#ASF-1037", customer: "Ama Mensah", items: "Akosua Maxi Skirt × 1", amount: 360, status: "Delivered", date: "Jul 7, 2026", fabric: "Ankara" },
-  { id: "#ASF-1036", customer: "Efua Darko", items: "Serwaa Jumpsuit × 1", amount: 440, status: "Delivered", date: "Jul 6, 2026", fabric: "Batik" },
-];
-
-const CUSTOMERS_DATA = [
-  { id: 1, name: "Abena Owusu", email: "abena.o@gmail.com", orders: 7, spent: 3240, location: "Accra", joined: "Jan 2025" },
-  { id: 2, name: "Yaa Boateng", email: "yaa.b@yahoo.com", orders: 4, spent: 2180, location: "Kumasi", joined: "Mar 2025" },
-  { id: 3, name: "Adjoa Kumi", email: "adjoa.k@outlook.com", orders: 12, spent: 6850, location: "London", joined: "Oct 2024" },
-  { id: 4, name: "Akua Asante", email: "akua.a@gmail.com", orders: 3, spent: 1670, location: "Toronto", joined: "May 2025" },
-  { id: 5, name: "Ama Mensah", email: "ama.m@icloud.com", orders: 9, spent: 4320, location: "Accra", joined: "Feb 2024" },
-  { id: 6, name: "Efua Darko", email: "efua.d@gmail.com", orders: 6, spent: 2940, location: "New York", joined: "Jun 2024" },
-];
 
 const KANBAN_COLS: { key: string; label: string; color: string }[] = [
   { key: "new", label: "New", color: "bg-blue-100 text-blue-800" },
+  { key: "reviewing", label: "Reviewing", color: "bg-blue-100 text-blue-800" },
+  { key: "quoted", label: "Quoted", color: "bg-yellow-100 text-yellow-800" },
   { key: "measuring", label: "Measuring", color: "bg-yellow-100 text-yellow-800" },
   { key: "cutting", label: "Cutting", color: "bg-orange-100 text-orange-800" },
   { key: "sewing", label: "Sewing", color: "bg-purple-100 text-purple-800" },
   { key: "fitting", label: "Fitting", color: "bg-pink-100 text-pink-800" },
   { key: "ready", label: "Ready", color: "bg-green-100 text-green-800" },
+  { key: "completed", label: "Completed", color: "bg-green-100 text-green-800" },
+  { key: "cancelled", label: "Cancelled", color: "bg-red-100 text-red-800" },
 ];
 
-const KANBAN_ITEMS = [
-  { id: "#ASF-1042", name: "Kofi Agyemang", item: "Custom Wedding Ankara Gown", col: "new", due: "Jul 20" },
-  { id: "#ASF-1040", name: "Yaa Boateng", item: "Efua Wrap Gown — Custom Fit", col: "sewing", due: "Jul 13" },
-  { id: "#ASF-1038", name: "Akua Asante", item: "Adjoa Evening Gown — Tailored", col: "ready", due: "Jul 12" },
-  { id: "#ASF-1035", name: "Maame Frimpong", item: "Batik Bridal Set — 2 pieces", col: "cutting", due: "Jul 15" },
-  { id: "#ASF-1034", name: "Adwoa Sarpong", item: "Custom Kente Shift Dress", col: "measuring", due: "Jul 14" },
-  { id: "#ASF-1033", name: "Esi Owusu", item: "Mother-of-Bride Maxi Gown", col: "fitting", due: "Jul 12" },
-];
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 const ghs = (n: number) => `GH₵ ${n.toLocaleString()}`;
+const settingString = (settings: Record<string, unknown>, key: string) => {
+  const value = settings[key];
+  return typeof value === "string" ? value.trim() : "";
+};
+const getInstagramProfile = (settings: Record<string, unknown>) => {
+  const configured = settingString(settings, "instagram_handle").replace(/^@(?=https?:\/\/)/i, "");
+  if (!configured) return null;
+  const isUrl = /^https?:\/\//i.test(configured);
+  const handle = (isUrl ? configured.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, "") : configured)
+    .replace(/^@/, "")
+    .replace(/[/?#].*$/, "");
+  if (!handle || (isUrl && !/^https?:\/\/(?:www\.)?instagram\.com\//i.test(configured))) return null;
+  return {
+    href: isUrl ? configured : `https://www.instagram.com/${handle}/`,
+    label: `@${handle}`,
+  };
+};
+const getWhatsAppUrl = (settings: Record<string, unknown>, message: string) => {
+  const configured = settingString(settings, "whatsapp_number") || settingString(settings, "store_phone");
+  let number = configured.replace(/\D/g, "");
+  if (number.startsWith("0")) number = `233${number.slice(1)}`;
+  return number ? `https://wa.me/${number}?text=${encodeURIComponent(message)}` : "";
+};
+const getGoogleMapsUrl = (settings: Record<string, unknown>) => {
+  const address = settingString(settings, "store_address");
+  return address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "";
+};
+
+function SeoHead({ page, product, settings, isAdmin = false }: { page: string; product?: Product; settings: Record<string, unknown>; isAdmin?: boolean }) {
+  useEffect(() => {
+    const privatePages = new Set(["account", "cart", "checkout"]);
+    const noIndex = isAdmin || privatePages.has(page);
+    const pageMeta: Record<string, { title: string; description: string }> = {
+      home: {
+        title: "Aunty Sala Fashion Gh | Ghanaian Fashion & Custom Dresses",
+        description: "Shop ready-to-wear and made-to-measure Ghanaian fashion from Aunty Sala Fashion Gh. Contemporary dresses crafted with beautiful African fabrics.",
+      },
+      shop: {
+        title: "Shop Ghanaian Dresses & African Fashion | Aunty Sala",
+        description: "Explore contemporary Ghanaian dresses, gowns, sets, and African-print fashion handcrafted by Aunty Sala Fashion Gh.",
+      },
+      custom: {
+        title: "Custom-Made Dresses in Ghana | Aunty Sala Fashion Gh",
+        description: "Order a made-to-measure dress crafted in Ghana. Choose your style and fabric, share your measurements, and let Aunty Sala create your piece.",
+      },
+      about: {
+        title: "About Aunty Sala Fashion Gh | Crafted in Ghana",
+        description: "Discover the story, craftsmanship, and Ghanaian heritage behind Aunty Sala Fashion Gh and its made-to-measure designs.",
+      },
+      contact: {
+        title: "Contact Aunty Sala Fashion Gh",
+        description: "Contact Aunty Sala Fashion Gh for custom dresses, sizing assistance, order support, and worldwide delivery enquiries.",
+      },
+      "help-sizing": { title: "Dress Sizing Guide | Aunty Sala Fashion Gh", description: "Find your best fit with the Aunty Sala Fashion Gh dress sizing and body measurement guide." },
+      "help-fabric-care": { title: "African Fabric Care Guide | Aunty Sala Fashion Gh", description: "Learn how to wash, dry, iron, and care for Ankara, kente, batik, and other African-fabric garments." },
+      "help-returns": { title: "Returns Policy | Aunty Sala Fashion Gh", description: "Read the returns, exchanges, alterations, and custom-order policy for Aunty Sala Fashion Gh." },
+      "help-faqs": { title: "Frequently Asked Questions | Aunty Sala Fashion Gh", description: "Answers about custom orders, sizing, worldwide delivery, order tracking, and Ghanaian fashion from Aunty Sala." },
+      account: { title: "My Account | Aunty Sala Fashion Gh", description: "Manage your Aunty Sala Fashion Gh account and orders." },
+      cart: { title: "Shopping Cart | Aunty Sala Fashion Gh", description: "Review the items in your Aunty Sala Fashion Gh shopping cart." },
+      checkout: { title: "Secure Checkout | Aunty Sala Fashion Gh", description: "Complete your Aunty Sala Fashion Gh order securely." },
+    };
+    const meta = product ? {
+      title: `${product.name} | Aunty Sala Fashion Gh`,
+      description: product.description.slice(0, 155),
+    } : isAdmin ? {
+      title: "Admin Portal | Aunty Sala Fashion Gh",
+      description: "Aunty Sala Fashion Gh administration portal.",
+    } : pageMeta[page] ?? pageMeta.home;
+    const canonicalUrl = new URL(window.location.pathname, window.location.origin).toString();
+    const imageUrl = product?.images[0] || new URL("/aunty-sala-logo.png", window.location.origin).toString();
+
+    const setMeta = (selector: string, attribute: "name" | "property", key: string, content: string) => {
+      let element = document.head.querySelector<HTMLMetaElement>(selector);
+      if (!element) {
+        element = document.createElement("meta");
+        element.setAttribute(attribute, key);
+        document.head.appendChild(element);
+      }
+      element.content = content;
+    };
+    document.title = meta.title;
+    setMeta('meta[name="description"]', "name", "description", meta.description);
+    setMeta('meta[name="robots"]', "name", "robots", noIndex ? "noindex, nofollow" : "index, follow, max-image-preview:large");
+    setMeta('meta[property="og:type"]', "property", "og:type", product ? "product" : "website");
+    setMeta('meta[property="og:title"]', "property", "og:title", meta.title);
+    setMeta('meta[property="og:description"]', "property", "og:description", meta.description);
+    setMeta('meta[property="og:url"]', "property", "og:url", canonicalUrl);
+    setMeta('meta[property="og:image"]', "property", "og:image", imageUrl);
+    setMeta('meta[property="og:image:alt"]', "property", "og:image:alt", product?.name ?? "Aunty Sala Fashion Gh logo");
+    setMeta('meta[name="twitter:card"]', "name", "twitter:card", "summary_large_image");
+    setMeta('meta[name="twitter:title"]', "name", "twitter:title", meta.title);
+    setMeta('meta[name="twitter:description"]', "name", "twitter:description", meta.description);
+    setMeta('meta[name="twitter:image"]', "name", "twitter:image", imageUrl);
+
+    let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+
+    const instagram = getInstagramProfile(settings);
+    const schema = product ? {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: product.name,
+      description: product.description,
+      image: product.images,
+      sku: product.sku,
+      category: product.category,
+      brand: { "@type": "Brand", name: "Aunty Sala Fashion Gh" },
+      offers: {
+        "@type": "Offer",
+        url: canonicalUrl,
+        priceCurrency: "GHS",
+        price: product.price,
+        availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+      },
+    } : {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: settingString(settings, "store_name") || "Aunty Sala Fashion Gh",
+      url: window.location.origin,
+      logo: new URL("/aunty-sala-logo.png", window.location.origin).toString(),
+      email: settingString(settings, "store_email") || undefined,
+      telephone: settingString(settings, "store_phone") || undefined,
+      address: settingString(settings, "store_address") ? { "@type": "PostalAddress", streetAddress: settingString(settings, "store_address"), addressCountry: "GH" } : undefined,
+      sameAs: instagram ? [instagram.href] : undefined,
+    };
+    let structuredData = document.head.querySelector<HTMLScriptElement>('#aunty-sala-structured-data');
+    if (!structuredData) {
+      structuredData = document.createElement("script");
+      structuredData.id = "aunty-sala-structured-data";
+      structuredData.type = "application/ld+json";
+      document.head.appendChild(structuredData);
+    }
+    structuredData.textContent = JSON.stringify(schema);
+  }, [isAdmin, page, product, settings]);
+  return null;
+}
+const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
+  const csv = rows.map((row) => row.map((value) => `"${String(value).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+function ManagedImage({ src, alt, className, onLoad }: { src?: string; alt: string; className: string; onLoad?: () => void }) {
+  return src ? <img src={src} alt={alt} className={className} onLoad={onLoad} /> : null;
+}
 const statusColor: Record<string, string> = {
+  Created: "bg-amber-50 text-amber-700",
+  "Draft (not paid)": "bg-amber-50 text-amber-700",
+  Paid: "bg-emerald-50 text-emerald-700",
   Processing: "bg-blue-50 text-blue-700",
+  Measuring: "bg-cyan-50 text-cyan-700",
+  Cutting: "bg-orange-50 text-orange-700",
   Sewing: "bg-purple-50 text-purple-700",
   Ready: "bg-green-50 text-green-700",
   Shipped: "bg-amber-50 text-amber-700",
   Delivered: "bg-gray-50 text-gray-600",
   Fitting: "bg-pink-50 text-pink-700",
+  Cancelled: "bg-red-50 text-red-700",
 };
 
 // ─── Pattern SVG ───────────────────────────────────────────────────────────
@@ -182,8 +286,8 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 // ─── Customer Nav ──────────────────────────────────────────────────────────
-function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
-  { page: string; setPage: (p: string) => void; cartCount: number; onAdminEnter: () => void }) {
+function CustomerNav({ page, setPage, cartCount, onAdminEnter, isAuthenticated }:
+  { page: string; setPage: (p: string) => void; cartCount: number; onAdminEnter: () => void; isAuthenticated: boolean }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -200,12 +304,15 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled || page !== "home" ? "bg-[#FAF7F2]/95 backdrop-blur-sm shadow-sm" : "bg-gradient-to-b from-black/50 to-transparent"}`}>
       <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-        <button onClick={() => setPage("home")} className="flex flex-col leading-none">
-          <span className={`text-xl font-bold tracking-tight transition-colors ${!scrolled && page === "home" ? "text-white" : "text-[#1A1A18]"}`} style={{ fontFamily: "var(--font-display)" }}>
-            Anty Sala
-          </span>
-          <span className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>
-            Fashion GH
+        <button onClick={() => setPage("home")} className="flex items-center gap-2 leading-none" aria-label="Aunty Sala Fashion Gh home">
+          <img src="/aunty-sala-logo.png" alt="" className="h-12 w-auto object-contain" />
+          <span className="hidden sm:flex flex-col items-start">
+            <span className={`text-xl font-bold tracking-tight transition-colors ${!scrolled && page === "home" ? "text-white" : "text-[#1A1A18]"}`} style={{ fontFamily: "var(--font-display)" }}>
+              Aunty Sala
+            </span>
+            <span className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>
+              Fashion Gh
+            </span>
           </span>
         </button>
 
@@ -220,8 +327,8 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
         </nav>
 
         <div className="flex items-center gap-4">
-          <button onClick={() => setPage("account")} className={`hidden md:flex p-2 hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label="Account">
-            <User size={20} />
+          <button onClick={() => setPage("account")} className={`hidden md:flex items-center gap-1.5 p-2 text-sm font-semibold hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label={isAuthenticated ? "Account" : "Login"}>
+            {isAuthenticated ? <User size={20} /> : "Login"}
           </button>
           <button onClick={() => setPage("cart")} className={`relative p-2 hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label="Cart">
             <ShoppingCart size={20} />
@@ -248,7 +355,7 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
           ))}
           <hr className="border-border my-1" />
           <button onClick={() => { setPage("account"); setOpen(false); }}
-            className="text-left py-2 text-base font-medium hover:text-[#C4562A]">My Account</button>
+            className="text-left py-2 text-base font-medium hover:text-[#C4562A]">{isAuthenticated ? "My Account" : "Login"}</button>
           <button onClick={onAdminEnter}
             className="text-left py-2 text-xs text-muted-foreground hover:text-[#C4562A]">Admin Portal ↗</button>
         </div>
@@ -259,42 +366,88 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter }:
 
 // ─── Customer Footer ───────────────────────────────────────────────────────
 function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
+  const { settings } = useStoreContent();
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribeError, setSubscribeError] = useState("");
+  const instagram = getInstagramProfile(settings);
+  const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
+  const phone = settingString(settings, "store_phone");
+  const storeEmail = settingString(settings, "store_email");
+  const contactLinks = [
+    instagram && { label: `Instagram ${instagram.label}`, href: instagram.href, icon: Instagram, external: true },
+    whatsappUrl && { label: "Chat with us on WhatsApp", href: whatsappUrl, icon: MessageCircle, external: true },
+    phone && { label: `Call ${phone}`, href: `tel:${phone.replace(/[^\d+]/g, "")}`, icon: Phone, external: false },
+    storeEmail && { label: `Email ${storeEmail}`, href: `mailto:${storeEmail}`, icon: Mail, external: false },
+  ].filter(Boolean) as Array<{ label: string; href: string; icon: typeof Instagram; external: boolean }>;
+  const shopLinks = [
+    { label: "Shop All", page: "shop" },
+    { label: "Custom Orders", page: "custom" },
+    { label: "My Account", page: "account" },
+    { label: "Shopping Cart", page: "cart" },
+  ];
+  const helpLinks = [
+    { label: "About Us", page: "about" },
+    { label: "Contact", page: "contact" },
+    { label: "Sizing Guide", page: "help-sizing" },
+    { label: "Fabric Care", page: "help-fabric-care" },
+    { label: "Returns Policy", page: "help-returns" },
+    { label: "FAQs", page: "help-faqs" },
+  ];
+  const handleSubscribe = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSubscribing(true);
+    setSubscribeError("");
+    try {
+      await subscribeToNewsletter(email);
+      setSubscribed(true);
+      setEmail("");
+    } catch (error) {
+      setSubscribeError(error instanceof Error ? error.message : "We couldn't subscribe you. Please try again.");
+    } finally {
+      setSubscribing(false);
+    }
+  };
   return (
     <footer className="bg-[#1A1A18] text-[#FAF7F2]">
       <KenteStripe />
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16 grid grid-cols-1 md:grid-cols-4 gap-10">
         <div className="md:col-span-1">
-          <div className="mb-4">
-            <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Anty Sala</p>
-            <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>Fashion GH</p>
-          </div>
+          <button type="button" onClick={() => setPage("home")} className="mb-4 flex items-center gap-3 text-left" aria-label="Go to homepage">
+            <img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh logo" className="h-20 w-auto object-contain" />
+            <div>
+              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala</p>
+              <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>Fashion Gh</p>
+            </div>
+          </button>
           <p className="text-sm text-[#FAF7F2]/60 leading-relaxed mt-3">
             Made-to-order dresses and ready-to-wear pieces blending contemporary silhouettes with the finest African print fabrics.
           </p>
           <div className="flex gap-3 mt-5">
-            {[Instagram, MessageCircle, Phone].map((Icon, i) => (
-              <button key={i} className="w-9 h-9 rounded-full border border-white/20 flex items-center justify-center hover:border-[#B8922A] hover:text-[#B8922A] transition-colors">
+            {contactLinks.map(({ label, href, icon: Icon, external }) => (
+              <a key={label} href={href} aria-label={label} title={label}
+                target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}
+                className="w-9 h-9 rounded-full border border-white/20 flex items-center justify-center hover:border-[#B8922A] hover:text-[#B8922A] transition-colors">
                 <Icon size={16} />
-              </button>
+              </a>
             ))}
           </div>
         </div>
 
         <div>
           <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Shop</p>
-          {["New Arrivals","Dresses","Gowns","Sets & Co-ords","Custom Orders"].map(l => (
-            <button key={l} onClick={() => setPage("shop")}
-              className="block text-sm text-[#FAF7F2]/60 hover:text-[#FAF7F2] mb-2.5 transition-colors text-left">{l}</button>
+          {shopLinks.map(({ label, page }) => (
+            <button key={label} type="button" onClick={() => setPage(page)}
+              className="block text-sm text-[#FAF7F2]/60 hover:text-[#FAF7F2] mb-2.5 transition-colors text-left">{label}</button>
           ))}
         </div>
 
         <div>
           <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Help</p>
-          {["About Us","Contact","Sizing Guide","Fabric Care","Returns Policy","FAQs"].map(l => (
-            <button key={l} onClick={() => setPage("about")}
-              className="block text-sm text-[#FAF7F2]/60 hover:text-[#FAF7F2] mb-2.5 transition-colors text-left">{l}</button>
+          {helpLinks.map(({ label, page }) => (
+            <button key={label} type="button" onClick={() => setPage(page)}
+              className="block text-sm text-[#FAF7F2]/60 hover:text-[#FAF7F2] mb-2.5 transition-colors text-left">{label}</button>
           ))}
         </div>
 
@@ -306,19 +459,20 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
               <Check size={16} /> <span>You're subscribed!</span>
             </div>
           ) : (
-            <form onSubmit={e => { e.preventDefault(); if (email) setSubscribed(true); }} className="flex flex-col gap-2">
+            <form onSubmit={handleSubscribe} className="flex flex-col gap-2">
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="your@email.com" required
                 className="bg-white/10 border border-white/20 rounded px-3 py-2.5 text-sm placeholder-white/30 focus:outline-none focus:border-[#B8922A] text-white" />
-              <button type="submit" className="bg-[#C4562A] hover:bg-[#A8411B] text-white text-sm font-semibold py-2.5 rounded transition-colors">
-                Subscribe
+              <button type="submit" disabled={subscribing} className="bg-[#C4562A] hover:bg-[#A8411B] disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded transition-colors">
+                {subscribing ? "Subscribing…" : "Subscribe"}
               </button>
+              {subscribeError && <p role="alert" className="text-xs text-red-300">{subscribeError}</p>}
             </form>
           )}
         </div>
       </div>
       <div className="border-t border-white/10 max-w-7xl mx-auto px-6 lg:px-10 py-5 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-[#FAF7F2]/40">
-        <p>© 2026 Anty Sala Fashion GH. All rights reserved.</p>
+        <p>© {new Date().getFullYear()} Aunty Sala Fashion Gh. All rights reserved.</p>
         <p>Designed & crafted in Accra, Ghana 🇬🇭</p>
       </div>
     </footer>
@@ -327,21 +481,24 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
 
 // ─── HOME PAGE ─────────────────────────────────────────────────────────────
 function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToCart: (p: Product) => void }) {
+  const PRODUCTS = useProducts();
+  const { testimonials, gallery, siteMedia, settings } = useStoreContent();
   const [heroLoaded, setHeroLoaded] = useState(false);
   const featured = PRODUCTS.slice(0, 4);
+  const instagram = getInstagramProfile(settings);
 
   return (
     <div className="min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
       {/* Hero */}
       <section className="relative h-[92vh] min-h-[600px] flex items-end bg-[#2A1810]">
-        <img src={IMG.hero1} alt="Elegant model in African print dress"
+        <ManagedImage src={siteMedia.home_hero} alt="Aunty Sala Fashion Gh collection"
           onLoad={() => setHeroLoaded(true)}
           className={`absolute inset-0 w-full h-full object-cover object-top transition-opacity duration-700 ${heroLoaded ? "opacity-90" : "opacity-0"}`} />
         <div className="absolute inset-0 bg-gradient-to-r from-[#1A0E08]/80 via-[#1A0E08]/40 to-transparent" />
         <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-10 pb-20 w-full">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-4 font-semibold">New Collection — Summer 2026</p>
-          <h1 className="text-white text-5xl md:text-7xl font-bold leading-none mb-6 max-w-xl" style={{ fontFamily: "var(--font-display)" }}>
-            Wear Your<br /><em className="not-italic text-[#C4562A]">Heritage.</em>
+          <h1 className="text-white text-5xl md:text-6xl lg:text-7xl font-bold leading-none mb-6 max-w-4xl" style={{ fontFamily: "var(--font-display)" }}>
+            Your Inner Diva,<br /><em className="not-italic text-[#C4562A]">Everything Fashionable.</em>
           </h1>
           <p className="text-white/70 text-lg max-w-sm mb-8 leading-relaxed">
             Made-to-measure dresses woven from the finest kente, ankara &amp; batik — crafted in Accra, for women everywhere.
@@ -381,7 +538,7 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           {featured.map(p => (
             <div key={p.id} className="group text-left bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
               <div className="relative overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}
-                onClick={() => setPage(`product-${p.id}`)}>
+                onClick={() => setPage(`product-${p.slug}`)}>
                 <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 {p.badge && (
                   <span className="absolute top-3 left-3 bg-[#C4562A] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">
@@ -394,7 +551,7 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
                   Add to Cart
                 </button>
               </div>
-              <div className="p-4" onClick={() => setPage(`product-${p.id}`)}>
+              <div className="p-4" onClick={() => setPage(`product-${p.slug}`)}>
                 <p className="text-xs text-[#B8922A] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
                 <p className="font-semibold text-sm mb-1" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
                 <p className="text-[#C4562A] font-bold text-sm">{ghs(p.price)}</p>
@@ -407,7 +564,7 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
       {/* Custom Order Banner */}
       <section className="relative overflow-hidden bg-[#1A1A18] mx-6 lg:mx-10 rounded-2xl mb-20">
         <div className="absolute inset-0">
-          <img src={IMG.fabric3} alt="Fabric texture" className="w-full h-full object-cover opacity-20" />
+          <ManagedImage src={siteMedia.home_custom_banner} alt="Custom fashion fabric" className="w-full h-full object-cover opacity-20" />
         </div>
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8 px-10 py-14">
           <div>
@@ -441,8 +598,8 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           <h2 className="text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Worn &amp; Loved</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {TESTIMONIALS.map((t, i) => (
-            <div key={i} className="bg-card rounded-xl p-7 shadow-sm border border-border/50">
+          {testimonials.map((t) => (
+            <div key={t.id} className="bg-card rounded-xl p-7 shadow-sm border border-border/50">
               <StarRating rating={t.rating} />
               <p className="text-sm leading-relaxed text-[#1A1A18]/80 mt-4 mb-5 italic" style={{ fontFamily: "var(--font-display)" }}>
                 &ldquo;{t.text}&rdquo;
@@ -461,14 +618,14 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Instagram size={18} className="text-[#C4562A]" />
-            <p className="font-semibold text-sm">@antysalafashiongh</p>
+            <p className="font-semibold text-sm">{instagram?.label ?? "Instagram"}</p>
           </div>
-          <a href="#" className="text-xs text-[#C4562A] font-semibold hover:underline">Follow us on Instagram</a>
+          {instagram && <a href={instagram.href} target="_blank" rel="noreferrer" className="text-xs text-[#C4562A] font-semibold hover:underline">Follow us on Instagram</a>}
         </div>
         <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-          {GALLERY_IMGS.map((img, i) => (
-            <div key={i} className="relative overflow-hidden rounded-lg bg-[#E8E2D9] group cursor-pointer" style={{ aspectRatio: "1" }}>
-              <img src={img} alt={`Gallery ${i+1}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+          {gallery.map((item) => (
+            <div key={item.id} className="relative overflow-hidden rounded-lg bg-[#E8E2D9] group cursor-pointer" style={{ aspectRatio: "1" }}>
+              <img src={item.imageUrl} alt={item.altText} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                 <Instagram size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
@@ -504,15 +661,35 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
 
 // ─── SHOP PAGE ─────────────────────────────────────────────────────────────
 function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToCart: (p: Product) => void }) {
+  const PRODUCTS = useProducts();
+  const { siteMedia } = useStoreContent();
+  const { ids: wishlist, toggle: toggleWishlist, isAuthenticated } = useWishlist();
   const [category, setCategory] = useState("All");
   const [fabric, setFabric] = useState("All");
   const [sortBy, setSortBy] = useState("featured");
   const [view, setView] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
-  const [wishlist, setWishlist] = useState<number[]>([]);
+  const [wishlistPending, setWishlistPending] = useState<string[]>([]);
+  const [wishlistError, setWishlistError] = useState("");
 
-  const categories = ["All","Dresses","Gowns","Sets","Skirts","Jumpsuits","Tops"];
-  const fabrics = ["All","Ankara","Kente","Batik"];
+  const handleWishlist = async (productId: string) => {
+    if (!isAuthenticated) {
+      setPage("account");
+      return;
+    }
+    setWishlistPending((current) => [...current, productId]);
+    setWishlistError("");
+    try {
+      await toggleWishlist(productId);
+    } catch (error) {
+      setWishlistError(error instanceof Error ? error.message : "The wishlist could not be updated.");
+    } finally {
+      setWishlistPending((current) => current.filter((id) => id !== productId));
+    }
+  };
+
+  const categories = ["All", ...new Set(PRODUCTS.map((product) => product.category))];
+  const fabrics = ["All", ...new Set(PRODUCTS.map((product) => product.fabric))];
 
   let filtered = PRODUCTS.filter(p => {
     const catMatch = category === "All" || p.category === category;
@@ -527,7 +704,7 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
     <div className="min-h-screen pt-16" style={{ fontFamily: "var(--font-body)" }}>
       {/* Page Header */}
       <div className="bg-[#1A1A18] py-14 px-6 lg:px-10 text-center relative overflow-hidden">
-        <img src={IMG.fabric2} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
+        <ManagedImage src={siteMedia.shop_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
         <div className="relative z-10">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Our Collection</p>
           <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Shop All Pieces</h1>
@@ -572,18 +749,20 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
         </div>
 
         <p className="text-sm text-muted-foreground mb-6">{filtered.length} piece{filtered.length !== 1 ? "s" : ""} found</p>
+        {wishlistError && <p role="alert" className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{wishlistError}</p>}
 
         {view === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {filtered.map(p => (
               <div key={p.id} className="group bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-border/40">
                 <div className="relative overflow-hidden bg-[#E8E2D9] cursor-pointer" style={{ aspectRatio: "3/4" }}
-                  onClick={() => setPage(`product-${p.id}`)}>
+                  onClick={() => setPage(`product-${p.slug}`)}>
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   {p.badge && <span className="absolute top-3 left-3 bg-[#C4562A] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">{p.badge}</span>}
                   {!p.inStock && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><span className="bg-white text-xs font-bold px-3 py-1 rounded">Out of Stock</span></div>}
-                  <button onClick={e => { e.stopPropagation(); setWishlist(w => w.includes(p.id) ? w.filter(i => i !== p.id) : [...w, p.id]); }}
-                    className="absolute top-3 right-3 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button disabled={wishlistPending.includes(p.id)} onClick={e => { e.stopPropagation(); void handleWishlist(p.id); }}
+                    aria-label={wishlist.includes(p.id) ? `Remove ${p.name} from wishlist` : `Add ${p.name} to wishlist`}
+                    className="absolute top-3 right-3 w-8 h-8 bg-white disabled:opacity-50 rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">
                     <Heart size={14} className={wishlist.includes(p.id) ? "fill-[#C4562A] text-[#C4562A]" : "text-[#1A1A18]"} />
                   </button>
                   {p.inStock && (
@@ -593,7 +772,7 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
                     </button>
                   )}
                 </div>
-                <div className="p-4" onClick={() => setPage(`product-${p.id}`)} role="button">
+                <div className="p-4" onClick={() => setPage(`product-${p.slug}`)} role="button">
                   <p className="text-xs text-[#B8922A] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
                   <p className="font-semibold text-sm mb-1" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
                   <div className="flex items-center gap-2">
@@ -608,7 +787,7 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           <div className="flex flex-col gap-4">
             {filtered.map(p => (
               <div key={p.id} className="bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 flex gap-5 p-4 cursor-pointer hover:shadow-md transition-shadow"
-                onClick={() => setPage(`product-${p.id}`)}>
+                onClick={() => setPage(`product-${p.slug}`)}>
                 <div className="w-24 h-28 rounded-lg overflow-hidden bg-[#E8E2D9] shrink-0">
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
                 </div>
@@ -621,11 +800,16 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
                     <span className="text-xs text-muted-foreground">{p.sizes.join(" · ")}</span>
                   </div>
                 </div>
-                <button onClick={e => { e.stopPropagation(); if (p.inStock) addToCart(p); }}
-                  disabled={!p.inStock}
-                  className="self-center shrink-0 bg-[#C4562A] disabled:opacity-40 hover:bg-[#A8411B] text-white text-xs font-semibold px-4 py-2.5 rounded transition-colors">
-                  {p.inStock ? "Add" : "OOS"}
-                </button>
+                <div className="self-center shrink-0 flex items-center gap-2">
+                  <button disabled={wishlistPending.includes(p.id)} onClick={e => { e.stopPropagation(); void handleWishlist(p.id); }} aria-label={wishlist.includes(p.id) ? `Remove ${p.name} from wishlist` : `Add ${p.name} to wishlist`} className="p-2.5 border border-border rounded hover:border-[#C4562A] disabled:opacity-50">
+                    <Heart size={15} className={wishlist.includes(p.id) ? "fill-[#C4562A] text-[#C4562A]" : ""} />
+                  </button>
+                  <button onClick={e => { e.stopPropagation(); if (p.inStock) addToCart(p); }}
+                    disabled={!p.inStock}
+                    className="bg-[#C4562A] disabled:opacity-40 hover:bg-[#A8411B] text-white text-xs font-semibold px-4 py-2.5 rounded transition-colors">
+                    {p.inStock ? "Add" : "OOS"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -644,20 +828,46 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
 }
 
 // ─── PRODUCT DETAIL ────────────────────────────────────────────────────────
-function ProductDetailPage({ productId, setPage, addToCart }:
-  { productId: number; setPage: (p: string) => void; addToCart: (p: Product) => void }) {
-  const product = PRODUCTS.find(p => p.id === productId) || PRODUCTS[0];
+function ProductDetailPage({ productSlug, setPage, addToCart }:
+  { productSlug: string; setPage: (p: string) => void; addToCart: (p: Product) => void }) {
+  const PRODUCTS = useProducts();
+  const { testimonials } = useStoreContent();
+  const { ids: wishlist, toggle: toggleWishlist, isAuthenticated } = useWishlist();
+  const product = PRODUCTS.find(p => p.slug === productSlug);
   const [imgIdx, setImgIdx] = useState(0);
   const [size, setSize] = useState("");
   const [tab, setTab] = useState("description");
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
-  const related = PRODUCTS.filter(p => p.id !== product.id && p.category === product.category).slice(0,3);
+  const [wishlistPending, setWishlistPending] = useState(false);
+  const [wishlistError, setWishlistError] = useState("");
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const related = product ? PRODUCTS.filter(p => p.id !== product.id && p.category === product.category).slice(0,3) : [];
+  const averageRating = testimonials.length
+    ? testimonials.reduce((total, testimonial) => total + testimonial.rating, 0) / testimonials.length
+    : null;
+
+  if (!product) return <div className="min-h-screen pt-24 text-center text-muted-foreground">Product not found.</div>;
 
   const handleAdd = () => {
     addToCart(product);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
+  };
+  const handleWishlist = async () => {
+    if (!isAuthenticated) {
+      setPage("account");
+      return;
+    }
+    setWishlistPending(true);
+    setWishlistError("");
+    try {
+      await toggleWishlist(product.id);
+    } catch (error) {
+      setWishlistError(error instanceof Error ? error.message : "The wishlist could not be updated.");
+    } finally {
+      setWishlistPending(false);
+    }
   };
 
   return (
@@ -706,8 +916,14 @@ function ProductDetailPage({ productId, setPage, addToCart }:
               {product.originalPrice && <span className="text-muted-foreground line-through text-lg">{ghs(product.originalPrice)}</span>}
             </div>
 
-            <StarRating rating={5} />
-            <p className="text-xs text-muted-foreground mt-1 mb-6">4.9 · 24 reviews</p>
+            {averageRating !== null && (
+              <div className="mb-6">
+                <StarRating rating={Math.round(averageRating)} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {averageRating.toFixed(1)} · {testimonials.length} {testimonials.length === 1 ? "review" : "reviews"}
+                </p>
+              </div>
+            )}
 
             {/* Color Swatches */}
             <div className="mb-5">
@@ -725,8 +941,13 @@ function ProductDetailPage({ productId, setPage, addToCart }:
             <div className="mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-sm font-semibold">Size</p>
-                <button className="text-xs text-[#C4562A] hover:underline">Size Guide</button>
+                <button onClick={() => setShowSizeGuide((current) => !current)} className="text-xs text-[#C4562A] hover:underline">Size Guide</button>
               </div>
+              {showSizeGuide && <div className="mb-3 overflow-x-auto rounded-lg border border-border bg-muted/30 p-3">
+                <table className="w-full text-xs"><thead><tr>{["Size","Bust","Waist","Hips"].map((heading) => <th key={heading} className="px-2 py-1.5 text-left">{heading}</th>)}</tr></thead><tbody>
+                  {[["XS","81–84","63–66","88–91"],["S","86–89","68–71","93–97"],["M","91–94","73–76","99–102"],["L","97–102","79–84","104–109"],["XL","104–109","86–91","112–117"],["XXL","112–117","94–99","119–124"]].map((row) => <tr key={row[0]} className="border-t border-border"><td className="px-2 py-1.5 font-semibold">{row[0]}</td><td className="px-2 py-1.5">{row[1]} cm</td><td className="px-2 py-1.5">{row[2]} cm</td><td className="px-2 py-1.5">{row[3]} cm</td></tr>)}
+                </tbody></table>
+              </div>}
               <div className="flex flex-wrap gap-2">
                 {product.sizes.map(s => (
                   <button key={s} onClick={() => setSize(s)}
@@ -748,10 +969,11 @@ function ProductDetailPage({ productId, setPage, addToCart }:
                 className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${added ? "bg-green-600 text-white" : "bg-[#C4562A] hover:bg-[#A8411B] text-white"} disabled:opacity-40`}>
                 {added ? <><Check size={16}/> Added!</> : <><ShoppingCart size={16}/> Add to Cart</>}
               </button>
-              <button className="w-12 h-12 border border-border rounded-lg flex items-center justify-center hover:border-[#C4562A] transition-colors">
-                <Heart size={18} />
+              <button disabled={wishlistPending} onClick={() => void handleWishlist()} aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} className="w-12 h-12 border border-border disabled:opacity-50 rounded-lg flex items-center justify-center hover:border-[#C4562A] transition-colors">
+                <Heart size={18} className={wishlist.includes(product.id) ? "fill-[#C4562A] text-[#C4562A]" : ""} />
               </button>
             </div>
+            {wishlistError && <p role="alert" className="mb-4 text-sm text-red-600">{wishlistError}</p>}
 
             <button onClick={() => setPage("custom")}
               className="w-full border-2 border-[#C4562A] text-[#C4562A] hover:bg-[#C4562A] hover:text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 mb-6">
@@ -788,8 +1010,8 @@ function ProductDetailPage({ productId, setPage, addToCart }:
               )}
               {tab === "reviews" && (
                 <div className="space-y-4">
-                  {TESTIMONIALS.slice(0,2).map((t,i) => (
-                    <div key={i} className="border-b border-border pb-4 last:border-0">
+                  {testimonials.slice(0,2).map((t) => (
+                    <div key={t.id} className="border-b border-border pb-4 last:border-0">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-semibold text-sm">{t.name}</span>
                         <StarRating rating={t.rating} />
@@ -810,7 +1032,7 @@ function ProductDetailPage({ productId, setPage, addToCart }:
             <h2 className="text-2xl font-bold mb-8" style={{ fontFamily: "var(--font-display)" }}>You May Also Love</h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {related.map(p => (
-                <button key={p.id} onClick={() => setPage(`product-${p.id}`)} className="group text-left bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 hover:shadow-md transition-shadow">
+                <button key={p.id} onClick={() => setPage(`product-${p.slug}`)} className="group text-left bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 hover:shadow-md transition-shadow">
                   <div className="overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}>
                     <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
@@ -831,20 +1053,44 @@ function ProductDetailPage({ productId, setPage, addToCart }:
 
 // ─── CUSTOM ORDER ──────────────────────────────────────────────────────────
 function CustomOrderPage() {
+  const { siteMedia, settings } = useStoreContent();
   const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submissionReference, setSubmissionReference] = useState("");
+  const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
   const [form, setForm] = useState({
     style: "", fabric: "", occasion: "", budget: "", name: "", email: "", phone: "",
     bust: "", waist: "", hips: "", height: "", notes: "",
   });
   const total = 4;
+  const whatsappNumber = String(settings.whatsapp_number ?? settings.store_phone ?? "").replace(/[^0-9]/g, "");
+  const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Hello Aunty Sala Fashion Gh, I need help with a custom order.")}` : undefined;
 
   const up = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
+  const handleSubmit = async () => {
+    setSubmitting(true);
+    setSubmitError("");
+    try {
+      const media = referenceFiles.length
+        ? await uploadManyToCloudinary(referenceFiles, "aunty-sala-fashion-gh/custom-orders")
+        : [];
+      const reference = await submitCustomOrder({ ...form, media });
+      setSubmissionReference(reference);
+      setStep(5);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "We couldn't submit your request. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const fabrics = [
-    { name: "Ankara", desc: "Bold, wax-resist dyed cotton prints", img: IMG.fabric1 },
-    { name: "Kente", desc: "Hand-woven silk & cotton strips", img: IMG.fabric2 },
-    { name: "Batik", desc: "Wax resist on fine cotton", img: IMG.fabric3 },
-    { name: "Mixed", desc: "Let our designers suggest", img: IMG.fabric4 },
+    { name: "Ankara", desc: "Bold, wax-resist dyed cotton prints", img: siteMedia.fabric_ankara },
+    { name: "Kente", desc: "Hand-woven silk & cotton strips", img: siteMedia.fabric_kente },
+    { name: "Batik", desc: "Wax resist on fine cotton", img: siteMedia.fabric_batik },
+    { name: "Mixed", desc: "Let our designers suggest", img: siteMedia.fabric_mixed },
   ];
   const styles = ["Maxi Gown","Midi Dress","Mini Dress","Skirt & Top Set","Jumpsuit","Peplum Top","Wrap Dress","Tailored Suit"];
   const occasions = ["Wedding Guest","Bridal","Corporate/Formal","Casual/Everyday","Cultural Event","Birthday","Red Carpet","Other"];
@@ -852,7 +1098,7 @@ function CustomOrderPage() {
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
       <div className="bg-[#1A1A18] py-12 px-6 text-center relative overflow-hidden">
-        <img src={IMG.fabric4} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
+        <ManagedImage src={siteMedia.custom_order_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
         <div className="relative z-10">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Bespoke Service</p>
           <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Custom Made-to-Measure</h1>
@@ -930,7 +1176,7 @@ function CustomOrderPage() {
               {fabrics.map(f => (
                 <button key={f.name} onClick={() => up("fabric", f.name)}
                   className={`relative rounded-xl overflow-hidden border-2 transition-colors text-left ${form.fabric === f.name ? "border-[#C4562A]" : "border-transparent"}`}>
-                  <img src={f.img} alt={f.name} className="w-full h-32 object-cover" />
+                  <ManagedImage src={f.img} alt={f.name} className="w-full h-32 object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-3">
                     <p className="text-white font-bold text-sm">{f.name}</p>
                     <p className="text-white/70 text-xs">{f.desc}</p>
@@ -941,11 +1187,23 @@ function CustomOrderPage() {
             </div>
             <div className="mb-8">
               <label className="block text-sm font-semibold mb-2">Reference Images / Inspiration</label>
-              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-[#C4562A] transition-colors cursor-pointer">
+              <label className="block border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-[#C4562A] transition-colors cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*,application/pdf"
+                  multiple
+                  className="sr-only"
+                  onChange={(event) => setReferenceFiles(Array.from(event.target.files ?? []).slice(0, 5))}
+                />
                 <Upload size={24} className="mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Drop files or click to upload</p>
-                <p className="text-xs text-muted-foreground mt-1">PNG, JPG, PDF up to 10MB</p>
-              </div>
+                <p className="text-sm text-muted-foreground">Click to choose reference files</p>
+                <p className="text-xs text-muted-foreground mt-1">PNG, JPG or PDF · maximum 5 files</p>
+              </label>
+              {referenceFiles.length > 0 && (
+                <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                  {referenceFiles.map((file) => <li key={`${file.name}-${file.lastModified}`}>{file.name}</li>)}
+                </ul>
+              )}
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(1)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
@@ -973,7 +1231,7 @@ function CustomOrderPage() {
               <MessageCircle size={16} className="text-[#B8922A] mt-0.5 shrink-0"/>
               <div>
                 <p className="text-sm font-semibold text-[#1A1A18]">Need help with measurements?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Our team can walk you through on WhatsApp. <button className="text-[#C4562A] font-semibold hover:underline">Chat now →</button></p>
+                <p className="text-xs text-muted-foreground mt-0.5">Our team can walk you through on WhatsApp. {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="text-[#C4562A] font-semibold hover:underline">Chat now →</a> : <span className="text-muted-foreground">Add a WhatsApp number in store settings.</span>}</p>
               </div>
             </div>
             <div className="flex gap-3">
@@ -1017,10 +1275,11 @@ function CustomOrderPage() {
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-              <button onClick={() => setStep(5)} className="flex-1 bg-[#C4562A] hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
-                Submit Order <Send size={15}/>
+              <button disabled={submitting || !form.name || !form.email || !form.phone} onClick={handleSubmit} className="flex-1 bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+                {submitting ? (referenceFiles.length ? "Uploading & submitting…" : "Submitting…") : "Submit Order"} <Send size={15}/>
               </button>
             </div>
+            {submitError && <p role="alert" className="text-sm text-red-600 mt-3">{submitError}</p>}
           </div>
         )}
 
@@ -1031,14 +1290,15 @@ function CustomOrderPage() {
             </div>
             <h2 className="text-3xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>Order Received!</h2>
             <p className="text-muted-foreground mb-2">Thank you, <strong>{form.name || "dear customer"}</strong>.</p>
+            {submissionReference && <p className="text-sm font-semibold text-[#C4562A] mb-2">Reference {submissionReference}</p>}
             <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
               Our team will review your custom order and reach out within 24 hours via WhatsApp and email to confirm fabric availability and pricing.
             </p>
             <div className="mt-8 flex gap-3 justify-center">
               <button onClick={() => setStep(1)} className="border border-border px-6 py-3 rounded-lg text-sm font-semibold hover:bg-muted transition-colors">New Order</button>
-              <button className="bg-[#C4562A] text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
+              {whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="bg-[#C4562A] text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
                 <MessageCircle size={15}/> Chat on WhatsApp
-              </button>
+              </a>}
             </div>
           </div>
         )}
@@ -1050,15 +1310,27 @@ function CustomOrderPage() {
 // ─── CART PAGE ─────────────────────────────────────────────────────────────
 interface CartItem { product: Product; qty: number; size: string; }
 
-function CartPage({ cartItems, setCartItems, setPage }:
-  { cartItems: CartItem[]; setCartItems: (items: CartItem[]) => void; setPage: (p: string) => void }) {
+function CartPage({ cartItems, setCartItems, setPage, promoCode, setPromoCode }:
+  { cartItems: CartItem[]; setCartItems: (items: CartItem[]) => void; setPage: (p: string) => void; promoCode: string; setPromoCode: (code: string) => void }) {
   const [promo, setPromo] = useState("");
-  const [promoApplied, setPromoApplied] = useState(false);
-
-  const subtotal = cartItems.reduce((sum, i) => sum + i.product.price * i.qty, 0);
-  const discount = promoApplied ? Math.round(subtotal * 0.1) : 0;
-  const shipping = subtotal >= 500 ? 0 : 50;
-  const total = subtotal - discount + shipping;
+  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  const [quoteError, setQuoteError] = useState("");
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  useEffect(() => {
+    if (!cartItems.length) { setQuote(null); return; }
+    let active = true;
+    setQuoteLoading(true);
+    setQuoteError("");
+    getCheckoutQuote(cartItems.map((item) => ({ productId: item.product.id, quantity: item.qty, size: item.size })), promoCode)
+      .then((nextQuote) => { if (active) setQuote(nextQuote); })
+      .catch((error) => { if (active) setQuoteError(error instanceof Error ? error.message : "The order total could not be calculated."); })
+      .finally(() => { if (active) setQuoteLoading(false); });
+    return () => { active = false; };
+  }, [cartItems, promoCode]);
+  const subtotal = quote?.subtotal ?? 0;
+  const discount = quote?.discountAmount ?? 0;
+  const shipping = quote?.shippingFee ?? 0;
+  const total = quote?.total ?? 0;
 
   const updateQty = (idx: number, qty: number) => {
     if (qty < 1) return;
@@ -1086,7 +1358,7 @@ function CartPage({ cartItems, setCartItems, setPage }:
                 <div key={idx} className="bg-card rounded-xl p-5 flex gap-4 shadow-sm border border-border/40">
                   <img src={item.product.images[0]} alt={item.product.name}
                     className="w-24 h-28 rounded-lg object-cover bg-[#E8E2D9] shrink-0 cursor-pointer"
-                    onClick={() => setPage(`product-${item.product.id}`)} />
+                    onClick={() => setPage(`product-${item.product.slug}`)} />
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                       <div>
@@ -1117,7 +1389,7 @@ function CartPage({ cartItems, setCartItems, setPage }:
                 <h2 className="font-bold text-lg mb-5" style={{ fontFamily: "var(--font-display)" }}>Order Summary</h2>
                 <div className="space-y-3 text-sm mb-5">
                   <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{ghs(subtotal)}</span></div>
-                  {promoApplied && <div className="flex justify-between text-green-700"><span>Promo (10% off)</span><span>− {ghs(discount)}</span></div>}
+                  {quote?.promoApplied && <div className="flex justify-between text-green-700"><span>Promotion</span><span>− {ghs(discount)}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Shipping</span><span>{shipping === 0 ? "Free" : ghs(shipping)}</span></div>
                   <div className="border-t border-border pt-3 flex justify-between font-bold text-base"><span>Total</span><span className="text-[#C4562A]">{ghs(total)}</span></div>
                 </div>
@@ -1125,18 +1397,18 @@ function CartPage({ cartItems, setCartItems, setPage }:
                 <div className="flex gap-2 mb-5">
                   <input value={promo} onChange={e => setPromo(e.target.value)}
                     placeholder="Promo code" className="flex-1 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]" />
-                  <button onClick={() => { if (promo === "ANTY10") setPromoApplied(true); }}
+                  <button disabled={quoteLoading || !promo.trim()} onClick={() => setPromoCode(promo.trim().toUpperCase())}
                     className="bg-[#1A1A18] text-white text-sm font-semibold px-4 rounded-lg hover:bg-[#2A2A20] transition-colors">Apply</button>
                 </div>
-                {promo && promo !== "ANTY10" && <p className="text-xs text-red-500 -mt-3 mb-4">Invalid promo code. Try ANTY10</p>}
-                <button onClick={() => setPage("checkout")}
+                {promoCode && quote?.promoMessage && <p className={`text-xs -mt-3 mb-4 ${quote.promoApplied ? "text-green-700" : "text-red-500"}`}>{quote.promoMessage}</p>}
+                {quoteError && <p role="alert" className="text-xs text-red-600 mb-4">{quoteError}</p>}
+                <button disabled={quoteLoading || !quote || Boolean(quoteError)} onClick={() => setPage("checkout")}
                   className="w-full bg-[#C4562A] hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
-                  Proceed to Checkout <ArrowRight size={16}/>
+                  {quoteLoading ? "Checking total…" : "Proceed to Checkout"} <ArrowRight size={16}/>
                 </button>
                 <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1">
                   <CreditCard size={12}/> Secure checkout · Mobile Money &amp; Card
                 </p>
-                {subtotal < 500 && <p className="text-xs text-center mt-2 text-[#B8922A]">Add {ghs(500-subtotal)} more for free delivery</p>}
               </div>
             </div>
           </div>
@@ -1147,14 +1419,155 @@ function CartPage({ cartItems, setCartItems, setPage }:
 }
 
 // ─── CHECKOUT PAGE ─────────────────────────────────────────────────────────
-function CheckoutPage({ cartItems, setPage }:
-  { cartItems: CartItem[]; setPage: (p: string) => void }) {
+function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
+  { cartItems: CartItem[]; setPage: (p: string) => void; session: Session; onOrderPlaced: () => void; promoCode: string }) {
+  const profileName = String(session.user.user_metadata?.full_name ?? session.user.user_metadata?.name ?? "").trim();
+  const profileNameParts = profileName.split(/\s+/).filter(Boolean);
   const [step, setStep] = useState(1);
-  const [payment, setPayment] = useState("momo");
   const [placed, setPlaced] = useState(false);
-  const total = cartItems.reduce((s, i) => s + i.product.price * i.qty, 0) + 50;
+  const [orderNumber, setOrderNumber] = useState("");
+  const [placingOrder, setPlacingOrder] = useState(false);
+  const [orderError, setOrderError] = useState("");
+  const [addresses, setAddresses] = useState<SavedAddress[]>([]);
+  const [addressesLoading, setAddressesLoading] = useState(true);
+  const [addressError, setAddressError] = useState("");
+  const [addressMode, setAddressMode] = useState<"saved" | "new">("new");
+  const [selectedAddressId, setSelectedAddressId] = useState("");
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [quote, setQuote] = useState<CheckoutQuote | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(true);
+  const [checkoutKey, setCheckoutKey] = useState(() => crypto.randomUUID());
+  const [verifyingPayment, setVerifyingPayment] = useState(false);
+  const [shipping, setShipping] = useState({
+    firstName: profileNameParts[0] ?? "", lastName: profileNameParts.slice(1).join(" "), email: session.user.email ?? "", phone: "",
+    address: "", city: "", country: "Ghana",
+  });
+  const total = quote?.total ?? 0;
 
   const steps = ["Shipping", "Payment", "Review"];
+
+  const updateShipping = (key: keyof typeof shipping, value: string) => {
+    setShipping((current) => ({ ...current, [key]: value }));
+  };
+
+  const applySavedAddress = (address: SavedAddress) => {
+    const names = address.recipientName.trim().split(/\s+/).filter(Boolean);
+    setSelectedAddressId(address.id);
+    setAddressMode("saved");
+    setShipping((current) => ({
+      ...current,
+      firstName: names[0] ?? "",
+      lastName: names.slice(1).join(" "),
+      phone: address.phone,
+      address: address.address,
+      city: address.city,
+      country: address.country,
+    }));
+  };
+
+  useEffect(() => {
+    let active = true;
+    getSavedAddresses()
+      .then((savedAddresses) => {
+        if (!active) return;
+        setAddresses(savedAddresses);
+        const preferred = savedAddresses.find((address) => address.isDefault) ?? savedAddresses[0];
+        if (preferred) applySavedAddress(preferred);
+      })
+      .catch((error) => { if (active) setAddressError(error instanceof Error ? error.message : "Saved addresses could not be loaded."); })
+      .finally(() => { if (active) setAddressesLoading(false); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!cartItems.length) { setQuoteLoading(false); return; }
+    let active = true;
+    setQuoteLoading(true);
+    getCheckoutQuote(cartItems.map((item) => ({ productId: item.product.id, quantity: item.qty, size: item.size })), promoCode)
+      .then((nextQuote) => { if (active) setQuote(nextQuote); })
+      .catch((error) => { if (active) setOrderError(error instanceof Error ? error.message : "The checkout total could not be calculated."); })
+      .finally(() => { if (active) setQuoteLoading(false); });
+    return () => { active = false; };
+  }, [cartItems, promoCode]);
+
+  useEffect(() => {
+    const reference = new URLSearchParams(window.location.search).get("reference")
+      ?? new URLSearchParams(window.location.search).get("trxref");
+    if (!reference) return;
+    let active = true;
+    setVerifyingPayment(true);
+    setOrderError("");
+    verifyPaystackPayment(reference)
+      .then((result) => {
+        if (!active) return;
+        if (!result.paid) throw new Error(`Payment is ${result.status}. Please complete payment or try again.`);
+        setOrderNumber(result.orderNumber ?? "");
+        onOrderPlaced();
+        setPlaced(true);
+        window.history.replaceState({}, "", "/checkout");
+      })
+      .catch((error) => { if (active) setOrderError(error instanceof Error ? error.message : "Payment verification failed."); })
+      .finally(() => { if (active) setVerifyingPayment(false); });
+    return () => { active = false; };
+  }, []);
+
+  const handleShippingContinue = async () => {
+    if (addressMode === "saved") {
+      setStep(2);
+      return;
+    }
+    setSavingAddress(true);
+    setAddressError("");
+    try {
+      const savedAddress = await addSavedAddress({
+        recipientName: `${shipping.firstName} ${shipping.lastName}`.trim(),
+        address: shipping.address,
+        city: shipping.city,
+        country: shipping.country,
+        phone: shipping.phone,
+        isDefault: addresses.length === 0,
+      });
+      setAddresses((current) => [savedAddress, ...current]);
+      setSelectedAddressId(savedAddress.id);
+      setAddressMode("saved");
+      setStep(2);
+    } catch (error) {
+      setAddressError(error instanceof Error ? error.message : "The address could not be saved.");
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    setPlacingOrder(true);
+    setOrderError("");
+    try {
+      const checkout = await initializePaystackCheckout({
+        customer: {
+          name: `${shipping.firstName} ${shipping.lastName}`.trim(),
+          email: shipping.email,
+          phone: shipping.phone,
+          address: shipping.address,
+          city: shipping.city,
+          country: shipping.country,
+        },
+        items: cartItems.map((item) => ({
+          productId: item.product.id,
+          quantity: item.qty,
+          size: item.size,
+        })),
+        promoCode,
+        checkoutKey,
+        callbackUrl: `${window.location.origin}/checkout`,
+      });
+      window.location.assign(checkout.authorizationUrl);
+    } catch (error) {
+      setOrderError(error instanceof Error ? error.message : "We couldn't place your order. Please try again.");
+      setCheckoutKey(crypto.randomUUID());
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
 
   if (placed) return (
     <div className="min-h-screen pt-20 flex items-center justify-center" style={{ fontFamily: "var(--font-body)" }}>
@@ -1163,8 +1576,8 @@ function CheckoutPage({ cartItems, setPage }:
           <CheckCircle size={36} className="text-green-600" />
         </div>
         <h1 className="text-3xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>Order Placed!</h1>
-        <p className="text-muted-foreground mb-1">Order #ASF-1043 confirmed.</p>
-        <p className="text-sm text-muted-foreground leading-relaxed mb-8">We've sent a confirmation to your email. Your pieces are now with our seamstresses.</p>
+        <p className="text-muted-foreground mb-1">Order {orderNumber} confirmed.</p>
+        <p className="text-sm text-muted-foreground leading-relaxed mb-8">Your Paystack payment was verified and your order is ready for processing.</p>
         <button onClick={() => setPage("account")} className="bg-[#C4562A] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#A8411B] transition-colors">Track My Order</button>
       </div>
     </div>
@@ -1198,61 +1611,88 @@ function CheckoutPage({ cartItems, setPage }:
             {step === 1 && (
               <div className="bg-card rounded-xl p-6 border border-border/40 shadow-sm">
                 <h2 className="font-bold text-lg mb-5" style={{ fontFamily: "var(--font-display)" }}>Shipping Details</h2>
-                <div className="grid grid-cols-2 gap-4">
-                  {[["First Name","text"],["Last Name","text"],["Email","email"],["Phone","tel"]].map(([label,type]) => (
-                    <div key={label}>
-                      <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                      <input type={type} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                    </div>
-                  ))}
-                  <div className="col-span-2">
-                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Address</label>
-                    <input type="text" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                  </div>
-                  {[["City","text"],["Country","text"]].map(([label,type]) => (
-                    <div key={label}>
-                      <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                      <input type={type} defaultValue={label === "Country" ? "Ghana" : ""} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                    </div>
-                  ))}
-                </div>
-                <button onClick={() => setStep(2)} className="mt-6 w-full bg-[#C4562A] text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors flex items-center justify-center gap-2">
-                  Continue to Payment <ArrowRight size={16}/>
+                {addressesLoading ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">Loading saved addresses…</p>
+                ) : (
+                  <>
+                    {addresses.length > 0 && (
+                      <div className="space-y-3 mb-5">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Saved addresses</p>
+                        {addresses.map((address) => (
+                          <label key={address.id} className={`block cursor-pointer rounded-xl border-2 p-4 transition-colors ${addressMode === "saved" && selectedAddressId === address.id ? "border-[#C4562A] bg-[#C4562A]/5" : "border-border hover:border-[#C4562A]/40"}`}>
+                            <input type="radio" name="shipping-address" className="sr-only" checked={addressMode === "saved" && selectedAddressId === address.id} onChange={() => applySavedAddress(address)} />
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-sm">{address.recipientName}</p>
+                                <p className="text-sm text-muted-foreground mt-1">{address.address}</p>
+                                <p className="text-sm text-muted-foreground">{address.city}, {address.country}</p>
+                                {address.phone && <p className="text-xs text-muted-foreground mt-1">{address.phone}</p>}
+                              </div>
+                              {address.isDefault && <span className="text-[10px] font-bold uppercase text-[#C4562A]">Default</span>}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    <button type="button" onClick={() => {
+                      setAddressMode("new");
+                      setSelectedAddressId("");
+                      setShipping((current) => ({ ...current, phone: "", address: "", city: "", country: "Ghana" }));
+                    }} className={`w-full border-2 border-dashed rounded-xl p-4 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${addressMode === "new" ? "border-[#C4562A] text-[#C4562A]" : "border-border text-muted-foreground hover:border-[#C4562A]"}`}>
+                      <Plus size={16}/> Add a new address
+                    </button>
+
+                    {addressMode === "new" && (
+                      <div className="grid grid-cols-2 gap-4 mt-5">
+                        {[["firstName","First Name","text"],["lastName","Last Name","text"],["email","Email","email"],["phone","Phone","tel"]].map(([key,label,type]) => (
+                          <div key={key}>
+                            <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
+                            <input required type={type} value={shipping[key as keyof typeof shipping]} onChange={(event) => updateShipping(key as keyof typeof shipping, event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                          </div>
+                        ))}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Address</label>
+                          <input required type="text" value={shipping.address} onChange={(event) => updateShipping("address", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                        </div>
+                        {[["city","City","text"],["country","Country","text"]].map(([key,label,type]) => (
+                          <div key={key}>
+                            <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
+                            <input required type={type} value={shipping[key as keyof typeof shipping]} onChange={(event) => updateShipping(key as keyof typeof shipping, event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                          </div>
+                        ))}
+                        <p className="col-span-2 text-xs text-muted-foreground">This address will be saved to your account.</p>
+                      </div>
+                    )}
+
+                    {addressMode === "saved" && (
+                      <div className="grid grid-cols-2 gap-4 mt-5">
+                        <div>
+                          <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Email</label>
+                          <input type="email" value={shipping.email} onChange={(event) => updateShipping("email", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Phone</label>
+                          <input type="tel" value={shipping.phone} onChange={(event) => updateShipping("phone", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                {addressError && <p role="alert" className="mt-4 text-sm text-red-600">{addressError}</p>}
+                <button disabled={addressesLoading || savingAddress || !shipping.firstName || !shipping.email || !shipping.phone || !shipping.address || !shipping.city} onClick={() => void handleShippingContinue()} className="mt-6 w-full bg-[#C4562A] disabled:opacity-50 text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors flex items-center justify-center gap-2">
+                  {savingAddress ? "Saving address…" : "Continue to Payment"} <ArrowRight size={16}/>
                 </button>
               </div>
             )}
 
             {step === 2 && (
               <div className="bg-card rounded-xl p-6 border border-border/40 shadow-sm">
-                <h2 className="font-bold text-lg mb-5" style={{ fontFamily: "var(--font-display)" }}>Payment Method</h2>
-                <div className="space-y-3 mb-6">
-                  {[{ id: "momo", label: "Mobile Money", sub: "MTN MoMo · Vodafone Cash · AirtelTigo", icon: Phone },
-                    { id: "card", label: "Debit / Credit Card", sub: "Visa · Mastercard · Verve", icon: CreditCard }].map(({ id, label, sub, icon: Icon }) => (
-                    <label key={id} className={`flex items-center gap-4 p-4 rounded-xl border-2 cursor-pointer transition-colors ${payment === id ? "border-[#C4562A] bg-[#C4562A]/5" : "border-border hover:border-[#C4562A]/40"}`}>
-                      <input type="radio" name="payment" value={id} checked={payment === id} onChange={() => setPayment(id)} className="accent-[#C4562A]" />
-                      <div className="w-9 h-9 bg-muted rounded-lg flex items-center justify-center"><Icon size={18}/></div>
-                      <div>
-                        <p className="font-semibold text-sm">{label}</p>
-                        <p className="text-xs text-muted-foreground">{sub}</p>
-                      </div>
-                    </label>
-                  ))}
+                <h2 className="font-bold text-lg mb-5" style={{ fontFamily: "var(--font-display)" }}>Secure Paystack Checkout</h2>
+                <div className="rounded-xl border border-border bg-muted/30 p-5 mb-6 flex gap-4">
+                  <div className="w-10 h-10 bg-[#C4562A]/10 rounded-lg flex items-center justify-center shrink-0"><CreditCard size={19} className="text-[#C4562A]"/></div>
+                  <div><p className="font-semibold text-sm">Mobile Money and international cards</p><p className="text-xs text-muted-foreground mt-1 leading-relaxed">After reviewing your order, Paystack will securely collect and verify your payment. Aunty Sala Fashion Gh never receives your card number or CVV.</p></div>
                 </div>
-                {payment === "momo" && (
-                  <div className="mb-4">
-                    <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Mobile Money Number</label>
-                    <input type="tel" placeholder="024 XXX XXXX" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                  </div>
-                )}
-                {payment === "card" && (
-                  <div className="space-y-3 mb-4">
-                    <input type="text" placeholder="Card number" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                    <div className="grid grid-cols-2 gap-3">
-                      <input type="text" placeholder="MM / YY" className="border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                      <input type="text" placeholder="CVV" className="border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-                    </div>
-                  </div>
-                )}
                 <div className="flex gap-3">
                   <button onClick={() => setStep(1)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
                   <button onClick={() => setStep(3)} className="flex-1 bg-[#C4562A] text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors flex items-center justify-center gap-2">
@@ -1282,8 +1722,9 @@ function CheckoutPage({ cartItems, setPage }:
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setStep(2)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-                  <button onClick={() => setPlaced(true)} className="flex-1 bg-[#C4562A] text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors">Place Order</button>
+                  <button disabled={placingOrder || verifyingPayment || quoteLoading || !quote || cartItems.length === 0} onClick={handlePlaceOrder} className="flex-1 bg-[#C4562A] disabled:opacity-50 text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors">{placingOrder ? "Opening Paystack…" : verifyingPayment ? "Verifying…" : "Pay with Paystack"}</button>
                 </div>
+                {orderError && <p role="alert" className="text-sm text-red-600 mt-3">{orderError}</p>}
               </div>
             )}
           </div>
@@ -1300,6 +1741,7 @@ function CheckoutPage({ cartItems, setPage }:
             <div className="border-t border-border pt-3 mt-2 flex justify-between font-bold text-[#C4562A]">
               <span>Total</span><span>{ghs(total)}</span>
             </div>
+            {quote?.discountAmount ? <p className="mt-2 text-xs text-green-700">Promotion saved you {ghs(quote.discountAmount)}</p> : null}
           </div>
         </div>
       </div>
@@ -1308,14 +1750,148 @@ function CheckoutPage({ cartItems, setPage }:
 }
 
 // ─── ACCOUNT PAGE ──────────────────────────────────────────────────────────
-function AccountPage() {
+function LoginPage({ redirectPath = "/account" }: { redirectPath?: string }) {
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  const redirectTo = `${window.location.origin}${redirectPath}`;
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    if (!supabase) {
+      setError("Supabase is not configured yet.");
+      return;
+    }
+    const { error: authError } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo },
+    });
+    if (authError) setError(authError.message);
+  };
+
+  const handleMagicLink = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSending(true);
+    setError("");
+    setMessage("");
+    if (!supabase) {
+      setError("Supabase is not configured yet.");
+      setSending(false);
+      return;
+    }
+
+    const { error: authError } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: redirectTo },
+    });
+    if (authError) setError(authError.message);
+    else setMessage("Check your email for a secure sign-in link.");
+    setSending(false);
+  };
+
+  return (
+    <div className="min-h-screen pt-24 pb-16 flex items-center justify-center px-6" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="w-full max-w-md bg-card border border-border/50 rounded-2xl shadow-sm p-7 sm:p-9">
+        <div className="text-center mb-7">
+          <div className="w-14 h-14 rounded-full bg-[#C4562A]/10 text-[#C4562A] flex items-center justify-center mx-auto mb-4">
+            <User size={24} />
+          </div>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Welcome back</h1>
+          <p className="text-sm text-muted-foreground mt-2">Sign in to view your profile, orders, and saved details.</p>
+        </div>
+
+        <button onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
+          className="w-full border border-border rounded-lg py-3 font-semibold text-sm hover:border-[#C4562A] transition-colors disabled:opacity-50 flex items-center justify-center gap-3">
+          <span className="w-5 h-5 rounded-full border border-border flex items-center justify-center text-xs font-bold">G</span>
+          Continue with Google
+        </button>
+
+        <div className="flex items-center gap-3 my-6">
+          <div className="h-px bg-border flex-1" />
+          <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
+          <div className="h-px bg-border flex-1" />
+        </div>
+
+        <form onSubmit={handleMagicLink} className="space-y-3">
+          <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email address</label>
+          <input id="login-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@example.com" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+          <button type="submit" disabled={sending || !isSupabaseConfigured}
+            className="w-full bg-[#C4562A] hover:bg-[#A8411B] disabled:opacity-50 text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
+            <Mail size={15} /> {sending ? "Sending link…" : "Email me a magic link"}
+          </button>
+        </form>
+
+        {message && <p role="status" className="mt-4 text-sm text-green-700 bg-green-50 rounded-lg p-3 text-center">{message}</p>}
+        {error && <p role="alert" className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg p-3 text-center">{error}</p>}
+      </div>
+    </div>
+  );
+}
+
+function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () => void }) {
   const [tab, setTab] = useState("orders");
-  const orders = [
-    { id: "#ASF-1041", date: "Jul 10, 2026", items: "Adwoa Midi Dress", amount: 480, status: "Shipped" },
-    { id: "#ASF-1038", date: "Jun 22, 2026", items: "Adjoa Evening Gown (Custom)", amount: 890, status: "Delivered" },
-    { id: "#ASF-1030", date: "May 14, 2026", items: "Abena Peplum Top × 2", amount: 560, status: "Delivered" },
-  ];
-  const statusSteps = ["Processing","Sewing","Ready","Shipped","Delivered"];
+  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+  const [accountData, setAccountData] = useState<AccountData | null>(null);
+  const [accountError, setAccountError] = useState("");
+  const [accountMessage, setAccountMessage] = useState("");
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [editingMeasurements, setEditingMeasurements] = useState(false);
+  const [measurementForm, setMeasurementForm] = useState({ bust: "", waist: "", hips: "", height: "", shoulderWidth: "", armLength: "" });
+  const [editingAddress, setEditingAddress] = useState<SavedAddress | "new" | null>(null);
+  const [addressForm, setAddressForm] = useState({ recipientName: "", address: "", city: "", country: "Ghana", phone: "", isDefault: false });
+  const displayName = session.user.user_metadata.full_name
+    || session.user.user_metadata.name
+    || session.user.email?.split("@")[0]
+    || "Customer";
+  const joinedDate = new Intl.DateTimeFormat("en-GH", { month: "short", year: "numeric" }).format(new Date(session.user.created_at));
+  const refreshAccount = async () => setAccountData(await getAccountData());
+  useEffect(() => {
+    refreshAccount().catch((error) => setAccountError(error instanceof Error ? error.message : "Unable to load your account."));
+  }, [session.user.id]);
+  const orders = accountData?.orders ?? [];
+  const statusSteps = ["Created","Paid","Processing","Shipped","Delivered"];
+  const beginMeasurementEdit = () => {
+    const byLabel = new Map((accountData?.measurements ?? []).map((item) => [item.label, item.value.replace(/[^0-9.]/g, "")]));
+    setMeasurementForm({
+      bust: byLabel.get("Bust") ?? "", waist: byLabel.get("Waist") ?? "", hips: byLabel.get("Hips") ?? "",
+      height: byLabel.get("Full Height") ?? "", shoulderWidth: byLabel.get("Shoulder Width") ?? "", armLength: byLabel.get("Arm Length") ?? "",
+    });
+    setEditingMeasurements(true);
+    setAccountMessage("");
+  };
+  const handleMeasurementSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAccountSaving(true); setAccountError(""); setAccountMessage("");
+    try {
+      const numberOrUndefined = (value: string) => value ? Number(value) : undefined;
+      await saveMeasurements({
+        bust: numberOrUndefined(measurementForm.bust), waist: numberOrUndefined(measurementForm.waist),
+        hips: numberOrUndefined(measurementForm.hips), height: numberOrUndefined(measurementForm.height),
+        shoulderWidth: numberOrUndefined(measurementForm.shoulderWidth), armLength: numberOrUndefined(measurementForm.armLength),
+      });
+      await refreshAccount(); setEditingMeasurements(false); setAccountMessage("Measurements saved.");
+    } catch (error) { setAccountError(error instanceof Error ? error.message : "Measurements could not be saved."); }
+    finally { setAccountSaving(false); }
+  };
+  const beginAddressEdit = (address?: SavedAddress) => {
+    setEditingAddress(address ?? "new");
+    setAddressForm(address ? { recipientName: address.recipientName, address: address.address, city: address.city, country: address.country, phone: address.phone, isDefault: address.isDefault }
+      : { recipientName: displayName, address: "", city: "", country: "Ghana", phone: "", isDefault: (accountData?.addresses.length ?? 0) === 0 });
+    setAccountMessage("");
+  };
+  const handleAddressSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAccountSaving(true); setAccountError(""); setAccountMessage("");
+    try {
+      if (editingAddress === "new") await addSavedAddress(addressForm);
+      else if (editingAddress) await updateSavedAddress({ id: editingAddress.id, ...addressForm });
+      await refreshAccount(); setEditingAddress(null); setAccountMessage("Address saved.");
+    } catch (error) { setAccountError(error instanceof Error ? error.message : "The address could not be saved."); }
+    finally { setAccountSaving(false); }
+  };
 
   return (
     <div className="min-h-screen pt-20 pb-16" style={{ fontFamily: "var(--font-body)" }}>
@@ -1325,10 +1901,13 @@ function AccountPage() {
           <div className="w-14 h-14 bg-[#C4562A] rounded-full flex items-center justify-center">
             <User size={24} className="text-white" />
           </div>
-          <div>
-            <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Akosua Mensah</h1>
-            <p className="text-sm text-muted-foreground">akosua.m@gmail.com · Member since Jan 2025</p>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold capitalize" style={{ fontFamily: "var(--font-display)" }}>{displayName}</h1>
+            <p className="text-sm text-muted-foreground">{session.user.email} · Member since {joinedDate}</p>
           </div>
+          <button onClick={onSignOut} className="border border-border rounded-lg px-4 py-2 text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center gap-2">
+            <LogOut size={14} /> Sign out
+          </button>
         </div>
 
         {/* Tabs */}
@@ -1341,65 +1920,101 @@ function AccountPage() {
           ))}
         </div>
 
-        {tab === "orders" && (
+        {accountError && <p role="alert" className="mb-6 rounded-lg bg-red-50 text-red-600 p-4 text-sm">{accountError}</p>}
+        {accountMessage && <p role="status" className="mb-6 rounded-lg bg-green-50 text-green-700 p-4 text-sm">{accountMessage}</p>}
+        {!accountData && !accountError && <p className="py-12 text-center text-sm text-muted-foreground">Loading account data…</p>}
+
+        {accountData && tab === "orders" && (
           <div className="space-y-4">
+            {orders.length === 0 && <p className="py-12 text-center text-muted-foreground">You have no orders yet.</p>}
             {orders.map(o => {
-              const stepIdx = statusSteps.indexOf(o.status);
+              const expanded = expandedOrderId === o.id;
+              const stepIdx = o.status === "Cancelled" ? 0 : statusSteps.indexOf(o.status);
               return (
-                <div key={o.id} className="bg-card rounded-xl p-6 border border-border/40 shadow-sm">
-                  <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
-                    <div>
+                <div key={o.id} className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
+                  <button type="button" onClick={() => setExpandedOrderId(expanded ? null : o.id)} aria-expanded={expanded} aria-controls={`order-${o.id}`}
+                    className="w-full p-5 md:p-6 flex flex-wrap items-center justify-between gap-4 text-left hover:bg-muted/30 transition-colors">
+                    <div className="min-w-0">
                       <p className="font-bold text-sm">{o.id}</p>
-                      <p className="text-xs text-muted-foreground">{o.date} · {o.items}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{o.date} · {o.itemDetails.length} {o.itemDetails.length === 1 ? "item" : "items"}</p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 ml-auto">
                       <span className="font-bold text-[#C4562A]">{ghs(o.amount)}</span>
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${statusColor[o.status] || "bg-gray-50 text-gray-600"}`}>{o.status}</span>
+                      <ChevronDown size={18} className={`text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
                     </div>
-                  </div>
-                  {/* Tracker */}
-                  <div className="flex items-center overflow-x-auto pb-1">
-                    {statusSteps.map((s, i) => {
-                      const done = i <= stepIdx;
-                      return (
-                        <div key={s} className="flex items-center shrink-0">
-                          <div className="flex flex-col items-center">
-                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${done ? "bg-[#C4562A] border-[#C4562A]" : "border-border"}`}>
-                              {done && <Check size={12} className="text-white"/>}
+                  </button>
+                  {expanded && (
+                    <div id={`order-${o.id}`} className="border-t border-border/60 p-5 md:p-6">
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Order items</h3>
+                      <div className="divide-y divide-border rounded-xl border border-border overflow-hidden mb-6">
+                        {o.itemDetails.map((item, index) => (
+                          <div key={`${item.name}-${index}`} className="p-4 flex items-start justify-between gap-4 bg-background">
+                            <div>
+                              <p className="font-semibold text-sm">{item.name}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Quantity: {item.quantity}{item.size ? ` · Size: ${item.size}` : ""}{item.color ? ` · Colour: ${item.color}` : ""}
+                              </p>
                             </div>
-                            <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${done ? "text-[#C4562A]" : "text-muted-foreground"}`}>{s}</span>
+                            <p className="font-bold text-sm shrink-0">{ghs(item.unitPrice * item.quantity)}</p>
                           </div>
-                          {i < statusSteps.length - 1 && <div className={`w-12 h-0.5 mx-1 ${i < stepIdx ? "bg-[#C4562A]" : "bg-border"}`}/>}
-                        </div>
-                      );
-                    })}
-                  </div>
+                        ))}
+                      </div>
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">Order status</h3>
+                      <div className="flex items-center overflow-x-auto pb-1">
+                        {statusSteps.map((status, index) => {
+                          const done = index <= stepIdx;
+                          return (
+                            <div key={status} className="flex items-center shrink-0">
+                              <div className="flex flex-col items-center">
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${done ? "bg-[#C4562A] border-[#C4562A]" : "border-border"}`}>
+                                  {done && <Check size={12} className="text-white"/>}
+                                </div>
+                                <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${done ? "text-[#C4562A]" : "text-muted-foreground"}`}>{status}</span>
+                              </div>
+                              {index < statusSteps.length - 1 && (
+                                <div className={`w-12 h-0.5 mx-1 ${index < stepIdx ? "bg-[#C4562A]" : "bg-border"}`} />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
 
-        {tab === "measurements" && (
+        {accountData && tab === "measurements" && (
           <div className="bg-card rounded-xl p-6 border border-border/40 shadow-sm max-w-lg">
             <h2 className="font-bold text-lg mb-5" style={{ fontFamily: "var(--font-display)" }}>Saved Measurements</h2>
             <div className="grid grid-cols-2 gap-4">
-              {[["Bust","92 cm"],["Waist","74 cm"],["Hips","100 cm"],["Full Height","168 cm"],["Shoulder Width","38 cm"],["Arm Length","58 cm"]].map(([k,v]) => (
-                <div key={k} className="bg-[#F0EAE0] rounded-lg p-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">{k}</p>
-                  <p className="font-bold text-lg">{v}</p>
+              {accountData.measurements.map((measurement) => (
+                <div key={measurement.label} className="bg-[#F0EAE0] rounded-lg p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">{measurement.label}</p>
+                  <p className="font-bold text-lg">{measurement.value}</p>
                 </div>
               ))}
             </div>
-            <button className="mt-5 w-full border border-border py-3 rounded-lg text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center justify-center gap-2">
+            {accountData.measurements.length === 0 && <p className="text-sm text-muted-foreground">No measurements saved.</p>}
+            <button onClick={beginMeasurementEdit} className="mt-5 w-full border border-border py-3 rounded-lg text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center justify-center gap-2">
               <Edit size={14}/> Update Measurements
             </button>
+            {editingMeasurements && <form onSubmit={handleMeasurementSave} className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-5">
+              {([['bust','Bust'],['waist','Waist'],['hips','Hips'],['height','Full Height'],['shoulderWidth','Shoulder Width'],['armLength','Arm Length']] as const).map(([key, label]) => <div key={key}>
+                <label className="block text-xs font-semibold mb-1 text-muted-foreground">{label} (cm)</label>
+                <input type="number" min="1" step="0.1" value={measurementForm[key]} onChange={(event) => setMeasurementForm((current) => ({ ...current, [key]: event.target.value }))} className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              </div>)}
+              <div className="col-span-2 flex gap-2"><button type="button" onClick={() => setEditingMeasurements(false)} className="flex-1 border border-border rounded-lg py-2 text-sm font-semibold">Cancel</button><button disabled={accountSaving} type="submit" className="flex-1 bg-[#C4562A] text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">{accountSaving ? "Saving…" : "Save"}</button></div>
+            </form>}
           </div>
         )}
 
-        {tab === "wishlist" && (
+        {accountData && tab === "wishlist" && (
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
-            {PRODUCTS.slice(0,3).map(p => (
+            {accountData.wishlist.map(p => (
               <div key={p.id} className="bg-card rounded-xl overflow-hidden border border-border/40 shadow-sm group">
                 <div className="overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}>
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -1411,22 +2026,32 @@ function AccountPage() {
                 </div>
               </div>
             ))}
+            {accountData.wishlist.length === 0 && <p className="col-span-full py-12 text-center text-muted-foreground">Your wishlist is empty.</p>}
           </div>
         )}
 
-        {tab === "addresses" && (
+        {accountData && tab === "addresses" && (
           <div className="max-w-lg">
-            <div className="bg-card rounded-xl p-5 border-2 border-[#C4562A] shadow-sm mb-4">
-              <div className="flex justify-between mb-2">
-                <span className="text-xs font-bold text-[#C4562A] uppercase tracking-wide">Default</span>
-                <button className="text-xs text-muted-foreground hover:text-[#C4562A]"><Edit size={12}/></button>
+            {accountData.addresses.map((address) => (
+              <div key={address.id} className={`bg-card rounded-xl p-5 border shadow-sm mb-4 ${address.isDefault ? "border-2 border-[#C4562A]" : "border-border"}`}>
+                <div className="flex justify-between mb-2">
+                  {address.isDefault && <span className="text-xs font-bold text-[#C4562A] uppercase tracking-wide">Default</span>}
+                  <button onClick={() => beginAddressEdit(address)} aria-label={`Edit ${address.recipientName} address`} className="ml-auto text-xs text-muted-foreground hover:text-[#C4562A]"><Edit size={12}/></button>
+                </div>
+                <p className="font-bold text-sm capitalize">{address.recipientName}</p>
+                <p className="text-sm text-muted-foreground">{address.address}, {address.city}, {address.country}</p>
               </div>
-              <p className="font-bold text-sm">Akosua Mensah</p>
-              <p className="text-sm text-muted-foreground">14 Cantonments Rd, Accra, Ghana</p>
-            </div>
-            <button className="w-full border-2 border-dashed border-border rounded-xl p-4 text-sm font-semibold text-muted-foreground hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center justify-center gap-2">
+            ))}
+            {accountData.addresses.length === 0 && <p className="mb-4 text-sm text-muted-foreground">No saved addresses.</p>}
+            <button onClick={() => beginAddressEdit()} className="w-full border-2 border-dashed border-border rounded-xl p-4 text-sm font-semibold text-muted-foreground hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center justify-center gap-2">
               <Plus size={16}/> Add New Address
             </button>
+            {editingAddress && <form onSubmit={handleAddressSave} className="mt-5 space-y-3 rounded-xl border border-border p-5">
+              <h3 className="font-bold">{editingAddress === "new" ? "New Address" : "Edit Address"}</h3>
+              {([['recipientName','Recipient name'],['address','Street address'],['city','City'],['country','Country'],['phone','Phone']] as const).map(([key, label]) => <div key={key}><label className="block text-xs font-semibold mb-1 text-muted-foreground">{label}</label><input required value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} className="w-full border border-border rounded-lg px-3 py-2 text-sm" /></div>)}
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={addressForm.isDefault} onChange={(event) => setAddressForm((current) => ({ ...current, isDefault: event.target.checked }))} /> Set as default</label>
+              <div className="flex gap-2"><button type="button" onClick={() => setEditingAddress(null)} className="flex-1 border border-border rounded-lg py-2 text-sm font-semibold">Cancel</button><button disabled={accountSaving} type="submit" className="flex-1 bg-[#C4562A] text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">{accountSaving ? "Saving…" : "Save Address"}</button></div>
+            </form>}
           </div>
         )}
       </div>
@@ -1436,6 +2061,10 @@ function AccountPage() {
 
 // ─── ABOUT PAGE ────────────────────────────────────────────────────────────
 function AboutPage() {
+  const { siteMedia, settings } = useStoreContent();
+  const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to learn more about your designs.");
+  const storeAddress = settingString(settings, "store_address");
+  const mapUrl = getGoogleMapsUrl(settings);
   return (
     <div className="min-h-screen pt-16" style={{ fontFamily: "var(--font-body)" }}>
       {/* Hero */}
@@ -1447,14 +2076,14 @@ function AboutPage() {
               Sewn with<br />Love, Rooted<br />in <em className="text-[#C4562A]">Ghana.</em>
             </h1>
             <p className="text-white/60 leading-relaxed max-w-sm">
-              Anty Sala Fashion GH was born in a small workshop in Accra's Osu district.
+              Aunty Sala Fashion Gh was born in a small workshop in Accra's Osu district.
               What began as one woman's passion for bringing African print fabrics into modern silhouettes
               has grown into a beloved boutique serving clients across Ghana and the diaspora.
             </p>
           </div>
         </div>
         <div className="relative overflow-hidden bg-[#E8E2D9] min-h-[50vh]">
-          <img src={IMG.sewing} alt="Seamstress at work" className="w-full h-full object-cover" />
+          <ManagedImage src={siteMedia.about_story} alt="Seamstress at work" className="w-full h-full object-cover" />
         </div>
       </div>
 
@@ -1494,28 +2123,136 @@ function AboutPage() {
               Every garment is cut, sewn, and finished by hand — no mass production, ever.
             </p>
             <p className="text-muted-foreground leading-relaxed">
-              When you order from Anty Sala, you're not just buying a dress. You're investing in Ghanaian craftsmanship,
+              When you order from Aunty Sala, you're not just buying a dress. You're investing in Ghanaian craftsmanship,
               supporting female artisans, and wearing something that was made with genuine love and intention.
             </p>
+            {mapUrl && (
+              <a href={mapUrl} target="_blank" rel="noreferrer"
+                className="inline-flex items-start gap-3 mt-6 text-sm font-semibold text-[#C4562A] hover:text-[#A8411B] transition-colors">
+                <MapPin size={20} className="shrink-0 mt-0.5" />
+                <span>
+                  <span className="block text-xs uppercase tracking-wider text-muted-foreground mb-0.5">Visit our atelier</span>
+                  {storeAddress}
+                </span>
+              </a>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <img src={IMG.workshop} alt="Workshop" className="rounded-xl w-full h-48 object-cover" />
-            <img src={IMG.fabric1} alt="Fabric" className="rounded-xl w-full h-48 object-cover" />
-            <img src={IMG.fabric3} alt="Textiles" className="rounded-xl w-full h-48 object-cover col-span-2" />
+            <ManagedImage src={siteMedia.about_workshop} alt="Workshop" className="rounded-xl w-full h-48 object-cover" />
+            <ManagedImage src={siteMedia.about_fabric} alt="Fabric" className="rounded-xl w-full h-48 object-cover" />
+            <ManagedImage src={siteMedia.about_textiles} alt="Textiles" className="rounded-xl w-full h-48 object-cover col-span-2" />
           </div>
         </div>
       </section>
+
+      {whatsappUrl && (
+        <section className="px-6 lg:px-10 py-14 bg-[#FAF7F2]">
+          <div className="max-w-4xl mx-auto rounded-2xl bg-[#1A1A18] px-7 py-8 md:px-10 md:py-9 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <p className="text-[#B8922A] text-xs tracking-[0.25em] uppercase mb-2 font-semibold">Speak With Our Team</p>
+              <h2 className="text-white text-2xl md:text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Have a design in mind?</h2>
+              <p className="text-white/60 text-sm mt-2">Chat with us directly for sizing, fabrics, custom orders, or any questions.</p>
+            </div>
+            <a href={whatsappUrl} target="_blank" rel="noreferrer"
+              className="shrink-0 bg-[#25D366] hover:bg-[#20bd5a] text-white px-6 py-3.5 rounded-lg font-bold text-sm flex items-center justify-center gap-2 transition-colors">
+              <MessageCircle size={18} /> Chat on WhatsApp
+            </a>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+type HelpSection = "sizing" | "fabric-care" | "returns" | "faqs";
+
+function HelpPage({ section, setPage }: { section: HelpSection; setPage: (page: string) => void }) {
+  const sectionTitles: Record<HelpSection, string> = {
+    sizing: "Sizing Guide",
+    "fabric-care": "Fabric Care",
+    returns: "Returns Policy",
+    faqs: "Frequently Asked Questions",
+  };
+  return (
+    <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="bg-[#1A1A18] py-12 px-6 text-center">
+        <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Customer Care</p>
+        <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>{sectionTitles[section]}</h1>
+      </div>
+      <KenteStripe />
+      <div className="max-w-3xl mx-auto px-6 py-14">
+        {section === "sizing" && <>
+          <p className="text-muted-foreground mb-7 leading-relaxed">Use the measurements below as a general guide. For made-to-measure pieces, submit your exact measurements with your custom order.</p>
+          <div className="overflow-x-auto rounded-xl border border-border">
+            <table className="w-full text-sm"><thead className="bg-[#F0EAE0]"><tr>{["Size","Bust","Waist","Hips"].map((item) => <th key={item} className="px-4 py-3 text-left">{item}</th>)}</tr></thead><tbody>
+              {[["XS","81–84","63–66","88–91"],["S","86–89","68–71","93–97"],["M","91–94","73–76","99–102"],["L","97–102","79–84","104–109"],["XL","104–109","86–91","112–117"],["XXL","112–117","94–99","119–124"]].map((row) => <tr key={row[0]} className="border-t border-border"><td className="px-4 py-3 font-bold">{row[0]}</td>{row.slice(1).map((value) => <td key={value} className="px-4 py-3">{value} cm</td>)}</tr>)}
+            </tbody></table>
+          </div>
+        </>}
+        {section === "fabric-care" && <>
+          <p className="text-muted-foreground mb-6 leading-relaxed">Care instructions can vary by fabric and embellishment. Always follow the care label supplied with your garment.</p>
+          <div className="space-y-3">{["Hand wash or use a gentle machine cycle in cold water.","Wash strong colours separately and avoid bleach.","Air dry away from harsh direct sunlight; do not tumble dry.","Iron on low heat from the reverse side.","Use professional dry cleaning for structured, embellished, or kente pieces."].map((item) => <div key={item} className="flex gap-3 rounded-lg bg-[#F0EAE0] p-4 text-sm"><Check size={17} className="text-[#C4562A] shrink-0" />{item}</div>)}</div>
+        </>}
+        {section === "returns" && <>
+          <p className="text-muted-foreground leading-relaxed mb-5">If there is a problem with your order, contact us promptly with your order number and clear photographs where relevant. Our team will confirm whether the item qualifies for a return, exchange, alteration, or repair.</p>
+          <div className="rounded-xl border border-border p-6 space-y-3 text-sm text-muted-foreground">
+            <p>Items must remain unworn, unwashed, and in their original condition.</p>
+            <p>Do not send an item back until our team has provided return instructions.</p>
+            <p>Made-to-measure and personalized garments are normally not returnable unless they are faulty or differ materially from the approved order.</p>
+            <p>Delivery charges and timelines depend on the reason for the return and the destination.</p>
+          </div>
+        </>}
+        {section === "faqs" && <div className="space-y-4">
+          {[
+            ["Do you deliver internationally?", "Yes. Delivery options and charges are confirmed for the destination during the order process."],
+            ["Can I order a custom size?", "Yes. Choose Custom Order and submit your measurements, preferred style, fabric, and occasion."],
+            ["How long does a custom order take?", "The schedule depends on the design and current workload. The team will confirm timing before production begins."],
+            ["How can I check my order?", "Sign in to your account to view order status, or contact the team with your order number."],
+            ["How do I choose the right size?", "Compare your body measurements with our sizing guide. Contact us if you fall between sizes."],
+          ].map(([question, answer]) => <div key={question} className="rounded-xl border border-border p-5"><h2 className="font-bold mb-2">{question}</h2><p className="text-sm text-muted-foreground leading-relaxed">{answer}</p></div>)}
+        </div>}
+        <div className="mt-10 rounded-xl bg-[#1A1A18] p-6 text-center">
+          <p className="text-white font-bold mb-2">Still need help?</p>
+          <p className="text-white/60 text-sm mb-4">Our team can help with your order, measurements, or garment care.</p>
+          <button type="button" onClick={() => setPage("contact")} className="bg-[#C4562A] hover:bg-[#A8411B] text-white px-6 py-3 rounded-lg text-sm font-bold">Contact Us</button>
+        </div>
+      </div>
     </div>
   );
 }
 
 // ─── CONTACT PAGE ──────────────────────────────────────────────────────────
 function ContactPage() {
+  const { settings, siteMedia } = useStoreContent();
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState("");
+  const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
+  const mapUrl = getGoogleMapsUrl(settings);
+
+  const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    setSending(true);
+    setSendError("");
+    try {
+      await submitContactMessage({
+        name: String(formData.get("name") ?? ""),
+        email: String(formData.get("email") ?? ""),
+        subject: String(formData.get("subject") ?? ""),
+        message: String(formData.get("message") ?? ""),
+      });
+      setSent(true);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : "We couldn't send your message. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  };
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
       <div className="bg-[#1A1A18] py-12 px-6 text-center relative overflow-hidden">
-        <img src={IMG.fabric2} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
+        <ManagedImage src={siteMedia.contact_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
         <div className="relative z-10">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">We'd Love to Hear From You</p>
           <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Get in Touch</h1>
@@ -1534,29 +2271,30 @@ function ContactPage() {
               <p className="text-sm text-muted-foreground text-center">We'll reply within 24 hours. You can also reach us on WhatsApp for a faster response.</p>
             </div>
           ) : (
-            <form onSubmit={e => { e.preventDefault(); setSent(true); }} className="space-y-4">
+            <form onSubmit={handleContactSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 {["Name","Email"].map(l => (
                   <div key={l}>
                     <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{l}</label>
-                    <input type={l === "Email" ? "email" : "text"} required className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                    <input name={l.toLowerCase()} type={l === "Email" ? "email" : "text"} required className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
                   </div>
                 ))}
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Subject</label>
-                <select className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]">
+                <select name="subject" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]">
                   <option>General Enquiry</option><option>Custom Order</option>
                   <option>Order Status</option><option>Returns &amp; Exchanges</option><option>Other</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Message</label>
-                <textarea required rows={5} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
+                <textarea name="message" required rows={5} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
               </div>
-              <button type="submit" className="w-full bg-[#C4562A] hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
-                Send Message <Send size={15}/>
+              <button disabled={sending} type="submit" className="w-full bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
+                {sending ? "Sending…" : "Send Message"} <Send size={15}/>
               </button>
+              {sendError && <p role="alert" className="text-sm text-red-600">{sendError}</p>}
             </form>
           )}
         </div>
@@ -1565,10 +2303,10 @@ function ContactPage() {
         <div>
           <h2 className="text-2xl font-bold mb-6" style={{ fontFamily: "var(--font-display)" }}>Contact Info</h2>
           <div className="space-y-5 mb-8">
-            {[{ icon: MapPin, label: "Location", value: "14 Cantonments Road, Osu, Accra, Ghana" },
-              { icon: Phone, label: "Phone", value: "+233 24 000 0000" },
-              { icon: Mail, label: "Email", value: "hello@antysalafashion.com" },
-              { icon: Clock, label: "Hours", value: "Mon–Sat: 9am – 6pm | Sun: Closed" }
+            {[{ icon: MapPin, label: "Location", value: String(settings.store_address ?? "") },
+              { icon: Phone, label: "Phone", value: String(settings.store_phone ?? "") },
+              { icon: Mail, label: "Email", value: String(settings.store_email ?? "") },
+              { icon: Clock, label: "Hours", value: String(settings.store_hours ?? "") }
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-[#C4562A]/10 rounded-lg flex items-center justify-center shrink-0">
@@ -1583,26 +2321,26 @@ function ContactPage() {
           </div>
 
           {/* WhatsApp CTA */}
-          <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-xl p-5 flex items-center gap-4">
+          {whatsappUrl && <div className="bg-[#25D366]/10 border border-[#25D366]/30 rounded-xl p-5 flex items-center gap-4">
             <div className="w-12 h-12 bg-[#25D366] rounded-xl flex items-center justify-center shrink-0">
               <MessageCircle size={22} className="text-white" />
             </div>
             <div>
               <p className="font-bold text-sm">Fastest response on WhatsApp</p>
               <p className="text-xs text-muted-foreground mt-0.5 mb-2">Chat directly with our design team — we reply within hours.</p>
-              <a href="#" className="text-xs font-bold text-[#25D366] hover:underline flex items-center gap-1">
+              <a href={whatsappUrl} target="_blank" rel="noreferrer" className="text-xs font-bold text-[#25D366] hover:underline flex items-center gap-1">
                 Open WhatsApp Chat <ArrowRight size={12}/>
               </a>
             </div>
-          </div>
+          </div>}
 
           {/* Map placeholder */}
           <div className="mt-6 rounded-xl overflow-hidden bg-[#E8E2D9] h-48 flex items-center justify-center relative">
-            <img src={IMG.fabric4} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
+            <ManagedImage src={siteMedia.contact_location} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
             <div className="relative z-10 flex flex-col items-center">
               <MapPin size={28} className="text-[#C4562A] mb-1" />
-              <p className="text-sm font-bold">Cantonments Road, Osu, Accra</p>
-              <a href="#" className="text-xs text-[#C4562A] hover:underline mt-1">View on Google Maps</a>
+              <p className="text-sm font-bold">{String(settings.store_address ?? "Location not configured")}</p>
+              {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="text-xs text-[#C4562A] hover:underline mt-1">View on Google Maps</a>}
             </div>
           </div>
         </div>
@@ -1619,6 +2357,7 @@ const ADMIN_LINKS = [
   { key: "custom-orders", label: "Tailoring Queue", icon: Scissors },
   { key: "customers", label: "Customers", icon: Users },
   { key: "analytics", label: "Analytics", icon: BarChart2 },
+  { key: "notifications", label: "Notifications", icon: Bell },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
@@ -1626,9 +2365,12 @@ function AdminSidebar({ page, setPage, onExit }:
   { page: string; setPage: (p: string) => void; onExit: () => void }) {
   return (
     <aside className="w-60 bg-[#1A1A18] text-[#FAF7F2] flex flex-col shrink-0 min-h-screen">
-      <div className="px-6 py-5 border-b border-white/8">
-        <p className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Anty Sala</p>
-        <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium">Admin Portal</p>
+      <div className="px-5 py-4 border-b border-white/8 flex items-center gap-3">
+        <img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh logo" className="h-12 w-auto object-contain" />
+        <div>
+          <p className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala</p>
+          <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium">Admin Portal</p>
+        </div>
       </div>
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {ADMIN_LINKS.map(({ key, label, icon: Icon }) => {
@@ -1653,18 +2395,21 @@ function AdminSidebar({ page, setPage, onExit }:
 
 // ─── ADMIN DASHBOARD ───────────────────────────────────────────────────────
 function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
+  const PRODUCTS = useProducts();
+  const { orders: ORDERS_DATA, salesData: SALES_DATA, categoryData: CATEGORY_DATA, tailoringItems } = useAdminData();
+  const revenue = ORDERS_DATA.reduce((sum, order) => sum + order.amount, 0);
   const metrics = [
-    { label: "Revenue (Jul)", value: "GH₵ 13,600", delta: "+18%", icon: DollarSign, up: true },
-    { label: "Orders Today", value: "7", delta: "+3 vs yesterday", icon: Package, up: true },
-    { label: "Custom Queue", value: "6", delta: "2 urgent", icon: Scissors, up: false },
-    { label: "Low Stock", value: "2 items", delta: "Batik Set, Kente Gown", icon: AlertCircle, up: false },
+    { label: "Total Revenue", value: ghs(revenue), delta: `${ORDERS_DATA.length} orders`, icon: DollarSign, up: true },
+    { label: "Orders", value: String(ORDERS_DATA.length), delta: "All recorded orders", icon: Package, up: true },
+    { label: "Custom Queue", value: String(tailoringItems.length), delta: "Active requests", icon: Scissors, up: false },
+    { label: "Out of Stock", value: String(PRODUCTS.filter((product) => !product.inStock).length), delta: "Products", icon: AlertCircle, up: false },
   ];
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
       <div className="mb-8">
         <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Saturday, 12 July 2026</p>
+        <p className="text-muted-foreground text-sm mt-1">Live data from Supabase</p>
       </div>
 
       {/* Metrics */}
@@ -1713,7 +2458,7 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
               <Pie data={CATEGORY_DATA} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
                 {CATEGORY_DATA.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v: number) => [`${v}%`, "Share"]} />
+              <Tooltip formatter={(v: number) => [v, "Products"]} />
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-1.5 mt-2">
@@ -1723,7 +2468,7 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: PIE_COLORS[i] }} />
                   <span>{d.name}</span>
                 </div>
-                <span className="font-semibold">{d.value}%</span>
+                <span className="font-semibold">{d.value}</span>
               </div>
             ))}
           </div>
@@ -1766,9 +2511,136 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
 
 // ─── ADMIN PRODUCTS ────────────────────────────────────────────────────────
 function AdminProducts() {
+  const { categories, products: PRODUCTS, refresh } = useAdminData();
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [editingProduct, setEditingProduct] = useState<(typeof PRODUCTS)[number] | null>(null);
+  const [productFiles, setProductFiles] = useState<File[]>([]);
+  const [availableCategories, setAvailableCategories] = useState(categories);
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categorySaving, setCategorySaving] = useState(false);
+  const [categoryError, setCategoryError] = useState("");
+  const [availableFabrics, setAvailableFabrics] = useState<string[]>([]);
+  const [showNewFabric, setShowNewFabric] = useState(false);
+  const [newFabricName, setNewFabricName] = useState("");
+  const [productForm, setProductForm] = useState({
+    name: "", sku: "", price: "", category: "", fabric: "", stock: "0",
+    description: "", sizes: "", colors: "",
+  });
+  useEffect(() => {
+    setAvailableCategories(categories);
+    setProductForm((current) => current.category || categories.length === 0 ? current : { ...current, category: categories[0].name });
+  }, [categories]);
+  useEffect(() => {
+    const fabrics = [...new Set(PRODUCTS.map((product) => product.fabric).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    setAvailableFabrics(fabrics);
+    setProductForm((current) => current.fabric || fabrics.length === 0 ? current : { ...current, fabric: fabrics[0] });
+  }, [PRODUCTS]);
   const filtered = PRODUCTS.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.fabric.toLowerCase().includes(search.toLowerCase()));
+  const setProductField = (field: keyof typeof productForm, value: string) => setProductForm((current) => ({ ...current, [field]: value }));
+  const resetProductForm = () => {
+    setEditingProduct(null);
+    setProductFiles([]);
+    setSaveError("");
+    setProductForm({
+      name: "", sku: "", price: "", category: availableCategories[0]?.name ?? "",
+      fabric: availableFabrics[0] ?? "", stock: "0", description: "", sizes: "", colors: "",
+    });
+  };
+  const openNewProduct = () => {
+    resetProductForm();
+    setShowForm(true);
+  };
+  const openEditProduct = (product: (typeof PRODUCTS)[number]) => {
+    setEditingProduct(product);
+    setProductFiles([]);
+    setSaveError("");
+    setProductForm({
+      name: product.name, sku: product.sku, price: String(product.price), category: product.category,
+      fabric: product.fabric, stock: String(product.inventoryQuantity), description: product.description,
+      sizes: product.sizes.join(", "), colors: product.colors.join(", "),
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const handleCreateCategory = async () => {
+    setCategorySaving(true);
+    setCategoryError("");
+    try {
+      const category = await createCategory(newCategoryName);
+      setAvailableCategories((current) => [...current, category].sort((a, b) => a.name.localeCompare(b.name)));
+      setProductField("category", category.name);
+      setNewCategoryName("");
+      setShowNewCategory(false);
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : "The category could not be created.");
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+  const handleAddFabric = () => {
+    const fabric = newFabricName.trim();
+    if (!fabric) return;
+    setAvailableFabrics((current) => [...new Set([...current, fabric])].sort((a, b) => a.localeCompare(b)));
+    setProductField("fabric", fabric);
+    setNewFabricName("");
+    setShowNewFabric(false);
+  };
+  const handleCreateProduct = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError("");
+    try {
+      const media = productFiles.length ? await uploadManyToCloudinary(productFiles, "aunty-sala-fashion-gh/products") : [];
+      const productInput = {
+        name: productForm.name,
+        sku: productForm.sku,
+        price: Number(productForm.price),
+        category: productForm.category,
+        fabric: productForm.fabric,
+        inventoryQuantity: Number(productForm.stock),
+        description: productForm.description,
+        sizes: productForm.sizes.split(",").map((value) => value.trim()).filter(Boolean),
+        colors: productForm.colors.split(",").map((value) => value.trim()).filter(Boolean),
+        media,
+      };
+      if (editingProduct) await updateProduct({ id: editingProduct.id, ...productInput });
+      else await createProduct(productInput);
+      await refresh();
+      resetProductForm();
+      setShowForm(false);
+      setActionMessage(editingProduct ? "Product updated." : "Product created.");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "The product could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const handleArchiveProduct = async (product: (typeof PRODUCTS)[number]) => {
+    if (!window.confirm(`Archive ${product.name}? It will be removed from the storefront.`)) return;
+    setSaveError("");
+    try {
+      await archiveProduct(product.id);
+      await refresh();
+      setActionMessage(`${product.name} was archived.`);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "The product could not be archived.");
+    }
+  };
+  const handleRestoreProduct = async (product: (typeof PRODUCTS)[number]) => {
+    setActionMessage("");
+    try {
+      await restoreProduct(product.id, product.inventoryQuantity);
+      await refresh();
+      setActionMessage(`${product.name} is live on the storefront again.`);
+    } catch (error) {
+      setActionMessage(error instanceof Error ? error.message : "The product could not be restored.");
+    }
+  };
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
@@ -1777,34 +2649,85 @@ function AdminProducts() {
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Products</h1>
           <p className="text-muted-foreground text-sm mt-1">{PRODUCTS.length} total products</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="bg-[#C4562A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
+        <button onClick={openNewProduct} className="bg-[#C4562A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
           <Plus size={15}/> Add Product
         </button>
       </div>
 
+      {actionMessage && <p role="status" className="mb-4 text-sm text-muted-foreground">{actionMessage}</p>}
+
       {showForm && (
-        <div className="bg-card rounded-xl p-6 border border-border/50 shadow-sm mb-6">
+        <form onSubmit={handleCreateProduct} className="bg-card rounded-xl p-6 border border-border/50 shadow-sm mb-6">
           <div className="flex justify-between mb-5">
-            <h2 className="font-bold text-lg" style={{ fontFamily: "var(--font-display)" }}>New Product</h2>
-            <button onClick={() => setShowForm(false)} className="text-muted-foreground hover:text-[#1A1A18]"><X size={18}/></button>
+            <h2 className="font-bold text-lg" style={{ fontFamily: "var(--font-display)" }}>{editingProduct ? "Edit Product" : "New Product"}</h2>
+            <button type="button" onClick={() => { resetProductForm(); setShowForm(false); }} className="text-muted-foreground hover:text-[#1A1A18]"><X size={18}/></button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {["Product Name","Price (GH₵)","Category","Fabric","Stock Qty"].map(l => (
-              <div key={l}>
-                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{l}</label>
-                <input className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]" />
+            {[
+              ["name", "Product Name", "text"], ["sku", "SKU", "text"], ["price", "Price (GH₵)", "number"],
+              ["stock", "Stock Qty", "number"],
+              ["sizes", "Sizes (comma-separated)", "text"], ["colors", "Colours (comma-separated)", "text"],
+            ].map(([field, label, type]) => (
+              <div key={field}>
+                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
+                <input required={!['sizes', 'colors'].includes(field)} type={type} min={type === "number" ? "0" : undefined} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductField(field as keyof typeof productForm, event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]" />
               </div>
             ))}
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category</label>
+                <button type="button" onClick={() => { setShowNewCategory((current) => !current); setCategoryError(""); }} className="text-xs font-semibold text-[#C4562A] hover:underline flex items-center gap-1">
+                  <Plus size={12}/> Add new
+                </button>
+              </div>
+              <select required value={productForm.category} onChange={(event) => setProductField("category", event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+                <option value="" disabled>Select category</option>
+                {availableCategories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
+              </select>
+              {showNewCategory && (
+                <div className="mt-2 flex gap-2">
+                  <input autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="New category" className="min-w-0 flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C4562A]" />
+                  <button type="button" disabled={categorySaving || !newCategoryName.trim()} onClick={() => void handleCreateCategory()} className="bg-[#1A1A18] disabled:opacity-50 text-white px-3 rounded-lg text-xs font-semibold">{categorySaving ? "Adding…" : "Add"}</button>
+                </div>
+              )}
+              {categoryError && <p role="alert" className="mt-1.5 text-xs text-red-600">{categoryError}</p>}
+            </div>
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fabric</label>
+                <button type="button" onClick={() => setShowNewFabric((current) => !current)} className="text-xs font-semibold text-[#C4562A] hover:underline flex items-center gap-1">
+                  <Plus size={12}/> Add new
+                </button>
+              </div>
+              <select required value={productForm.fabric} onChange={(event) => setProductField("fabric", event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+                <option value="" disabled>Select fabric</option>
+                {availableFabrics.map((fabric) => <option key={fabric} value={fabric}>{fabric}</option>)}
+              </select>
+              {showNewFabric && (
+                <div className="mt-2 flex gap-2">
+                  <input autoFocus value={newFabricName} onChange={(event) => setNewFabricName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleAddFabric(); } }} placeholder="New fabric" className="min-w-0 flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C4562A]" />
+                  <button type="button" disabled={!newFabricName.trim()} onClick={handleAddFabric} className="bg-[#1A1A18] disabled:opacity-50 text-white px-3 rounded-lg text-xs font-semibold">Add</button>
+                </div>
+              )}
+            </div>
             <div className="col-span-2 md:col-span-3">
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Description</label>
-              <textarea rows={3} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
+              <textarea required value={productForm.description} onChange={(event) => setProductField("description", event.target.value)} rows={3} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
+            </div>
+            <div className="col-span-2 md:col-span-3">
+              <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Product media</label>
+              <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg px-4 py-6 text-sm text-muted-foreground cursor-pointer hover:border-[#C4562A]">
+                <input required={!editingProduct} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => setProductFiles(Array.from(event.target.files ?? []))} />
+                <Upload size={16} /> {productFiles.length ? `${productFiles.length} file(s) selected` : editingProduct ? "Add more Cloudinary images (optional)" : "Choose images for Cloudinary"}
+              </label>
             </div>
           </div>
+          {saveError && <p role="alert" className="mt-4 text-sm text-red-600">{saveError}</p>}
           <div className="mt-4 flex gap-3">
-            <button onClick={() => setShowForm(false)} className="border border-border px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
-            <button className="bg-[#C4562A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">Save Product</button>
+            <button type="button" onClick={() => { resetProductForm(); setShowForm(false); }} className="border border-border px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
+            <button disabled={saving || (!editingProduct && productFiles.length === 0)} type="submit" className="bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{saving ? "Uploading & saving…" : editingProduct ? "Update Product" : "Save Product"}</button>
           </div>
-        </div>
+        </form>
       )}
 
       <div className="bg-card rounded-xl border border-border/50 shadow-sm">
@@ -1840,14 +2763,17 @@ function AdminProducts() {
                   <td className="px-6 py-4 text-muted-foreground">{p.category}</td>
                   <td className="px-6 py-4 font-bold text-[#C4562A]">{ghs(p.price)}</td>
                   <td className="px-6 py-4">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${p.inStock ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-                      {p.inStock ? "In Stock" : "Out of Stock"}
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${!p.isActive ? "bg-gray-100 text-gray-600" : p.inStock ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                      {!p.isActive ? "Archived" : p.inStock ? "In Stock" : "Out of Stock"}
                     </span>
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <button className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#1A1A18]"><Edit size={14}/></button>
-                      <button className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#C4562A]"><Eye size={14}/></button>
+                      <button onClick={() => openEditProduct(p)} aria-label={`Edit ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#1A1A18]"><Edit size={14}/></button>
+                      {p.isActive && <button onClick={() => window.open(`/product/${p.slug}`, "_blank", "noopener,noreferrer")} aria-label={`View ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#C4562A]"><Eye size={14}/></button>}
+                      {p.isActive
+                        ? <button onClick={() => void handleArchiveProduct(p)} aria-label={`Archive ${p.name}`} className="p-1.5 hover:bg-red-50 rounded transition-colors text-muted-foreground hover:text-red-600"><Trash2 size={14}/></button>
+                        : <button onClick={() => void handleRestoreProduct(p)} aria-label={`Restore ${p.name}`} className="px-2 py-1 text-xs font-semibold text-[#C4562A] hover:bg-[#C4562A]/10 rounded">Restore</button>}
                     </div>
                   </td>
                 </tr>
@@ -1862,10 +2788,38 @@ function AdminProducts() {
 
 // ─── ADMIN ORDERS ──────────────────────────────────────────────────────────
 function AdminOrders() {
+  const { orders: ORDERS_DATA, refresh } = useAdminData();
   const [filter, setFilter] = useState("All");
   const [selected, setSelected] = useState<(typeof ORDERS_DATA)[0] | null>(null);
-  const statuses = ["All","Processing","Sewing","Ready","Shipped","Delivered"];
+  const [selectedStatus, setSelectedStatus] = useState("");
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const statuses = ["All","Draft (not paid)","Paid","Processing","Shipped","Delivered","Cancelled"];
   const filtered = filter === "All" ? ORDERS_DATA : ORDERS_DATA.filter(o => o.status === filter);
+  const selectOrder = (order: (typeof ORDERS_DATA)[number]) => {
+    setSelected(order);
+    setSelectedStatus(order.status);
+    setStatusMessage("");
+  };
+  const handleStatusSave = async () => {
+    if (!selected) return;
+    setStatusSaving(true);
+    setStatusMessage("");
+    try {
+      await updateOrderStatus(selected.databaseId, selectedStatus);
+      setSelected({ ...selected, status: selectedStatus });
+      await refresh();
+      setStatusMessage("Order status updated.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "The order status could not be updated.");
+    } finally {
+      setStatusSaving(false);
+    }
+  };
+  const exportOrders = () => downloadCsv("aunty-sala-orders.csv", [
+    ["Order", "Customer", "Items", "Amount", "Status", "Date"],
+    ...ORDERS_DATA.map((order) => [order.id, order.customer, order.items, order.amount, order.status, order.date]),
+  ]);
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
@@ -1874,7 +2828,7 @@ function AdminOrders() {
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Orders</h1>
           <p className="text-muted-foreground text-sm mt-1">{ORDERS_DATA.length} total orders</p>
         </div>
-        <button className="border border-border px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center gap-2">
+        <button onClick={exportOrders} className="border border-border px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center gap-2">
           <Download size={14}/> Export CSV
         </button>
       </div>
@@ -1901,7 +2855,7 @@ function AdminOrders() {
               </thead>
               <tbody>
                 {filtered.map(o => (
-                  <tr key={o.id} onClick={() => setSelected(o)}
+                  <tr key={o.id} onClick={() => selectOrder(o)}
                     className={`border-b border-border/50 cursor-pointer transition-colors ${selected?.id === o.id ? "bg-[#C4562A]/5" : "hover:bg-muted/30"}`}>
                     <td className="px-5 py-3.5">
                       <span className="font-mono text-xs font-bold text-[#C4562A]">{o.id}</span>
@@ -1936,27 +2890,23 @@ function AdminOrders() {
                     <span className="font-semibold text-right">{v}</span>
                   </div>
                 ))}
-                {selected.custom && (
-                  <div className="bg-[#F0EAE0] rounded-lg p-3 mt-2">
-                    <p className="text-xs font-bold text-[#B8922A] uppercase tracking-wide mb-1">Custom Measurements</p>
-                    <div className="grid grid-cols-2 gap-1 text-xs">
-                      {[["Bust","92cm"],["Waist","74cm"],["Hips","100cm"],["Height","168cm"]].map(([k,v]) => (
-                        <div key={k}><span className="text-muted-foreground">{k}: </span><span className="font-semibold">{v}</span></div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
               <div className="mb-4">
                 <label className="block text-xs font-semibold mb-2 uppercase tracking-wide text-muted-foreground">Update Status</label>
-                <select defaultValue={selected.status} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]">
-                  {["Processing","Sewing","Fitting","Ready","Shipped","Delivered"].map(s => <option key={s}>{s}</option>)}
+                <select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]">
+                  {statuses.filter((status) => status !== "All").map((status) => (
+                    <option key={status} disabled={(status === "Paid" && selected.status === "Draft (not paid)") || (status === "Draft (not paid)" && selected.status !== "Draft (not paid)")}>
+                      {status}
+                    </option>
+                  ))}
                 </select>
+                {selected.status === "Draft (not paid)" && <p className="text-xs text-muted-foreground mt-2">Paid is set automatically after Paystack verifies the payment.</p>}
               </div>
               <div className="flex gap-2">
-                <button className="flex-1 bg-[#C4562A] text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">Save Status</button>
-                <button className="p-2.5 border border-border rounded-lg hover:bg-muted transition-colors"><Printer size={15}/></button>
+                <button disabled={statusSaving || selectedStatus === selected.status} onClick={() => void handleStatusSave()} className="flex-1 bg-[#C4562A] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{statusSaving ? "Saving…" : "Save Status"}</button>
+                <button onClick={() => window.print()} aria-label={`Print ${selected.id}`} className="p-2.5 border border-border rounded-lg hover:bg-muted transition-colors"><Printer size={15}/></button>
               </div>
+              {statusMessage && <p role="status" className="mt-3 text-xs text-muted-foreground">{statusMessage}</p>}
             </div>
           ) : (
             <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6 flex flex-col items-center justify-center h-48 text-center">
@@ -1972,11 +2922,28 @@ function AdminOrders() {
 
 // ─── ADMIN CUSTOM ORDERS KANBAN ────────────────────────────────────────────
 function AdminCustomOrders() {
-  const [items, setItems] = useState(KANBAN_ITEMS);
+  const { tailoringItems, refresh } = useAdminData();
+  const [items, setItems] = useState(tailoringItems);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+  useEffect(() => setItems(tailoringItems), [tailoringItems]);
   const byCol = (col: string) => items.filter(i => i.col === col);
 
-  const moveItem = (id: string, toCol: string) => {
+  const moveItem = async (id: string, toCol: string) => {
+    const previousItems = items;
     setItems(prev => prev.map(i => i.id === id ? { ...i, col: toCol } : i));
+    setSavingId(id);
+    setStatusMessage("");
+    try {
+      await updateCustomOrderStatus(id, toCol);
+      await refresh();
+      setStatusMessage("Tailoring status updated.");
+    } catch (error) {
+      setItems(previousItems);
+      setStatusMessage(error instanceof Error ? error.message : "The tailoring status could not be updated.");
+    } finally {
+      setSavingId(null);
+    }
   };
 
   return (
@@ -1985,6 +2952,7 @@ function AdminCustomOrders() {
         <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Tailoring Queue</h1>
         <p className="text-muted-foreground text-sm mt-1">Track every custom order through the making process</p>
       </div>
+      {statusMessage && <p role="status" className="mb-4 text-sm text-muted-foreground">{statusMessage}</p>}
 
       <div className="overflow-x-auto pb-4">
         <div className="flex gap-4 min-w-max">
@@ -2000,12 +2968,12 @@ function AdminCustomOrders() {
               <div className="p-3 flex flex-col gap-2.5 flex-1">
                 {byCol(col.key).map(item => (
                   <div key={item.id} className="bg-background border border-border/60 rounded-lg p-3 shadow-sm">
-                    <p className="font-mono text-[10px] text-[#C4562A] font-bold mb-1">{item.id}</p>
+                    <p className="font-mono text-[10px] text-[#C4562A] font-bold mb-1">{item.reference}</p>
                     <p className="font-semibold text-xs leading-snug mb-1">{item.name}</p>
                     <p className="text-[11px] text-muted-foreground leading-snug mb-2">{item.item}</p>
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar size={10}/> {item.due}</span>
-                      <select value={item.col} onChange={e => moveItem(item.id, e.target.value)}
+                      <select disabled={savingId === item.id} value={item.col} onChange={e => void moveItem(item.id, e.target.value)}
                         className="text-[10px] border border-border rounded px-1.5 py-0.5 focus:outline-none focus:border-[#C4562A] bg-card">
                         {KANBAN_COLS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                       </select>
@@ -2028,6 +2996,7 @@ function AdminCustomOrders() {
 
 // ─── ADMIN CUSTOMERS ───────────────────────────────────────────────────────
 function AdminCustomers() {
+  const { customers: CUSTOMERS_DATA } = useAdminData();
   const [selected, setSelected] = useState<(typeof CUSTOMERS_DATA)[0] | null>(null);
   const [search, setSearch] = useState("");
   const filtered = CUSTOMERS_DATA.filter(c =>
@@ -2108,17 +3077,17 @@ function AdminCustomers() {
               <div className="mb-5">
                 <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2">Saved Measurements</p>
                 <div className="grid grid-cols-2 gap-1.5 text-xs">
-                  {[["Bust","92cm"],["Waist","74cm"],["Hips","100cm"],["Height","168cm"]].map(([k,v]) => (
-                    <div key={k} className="flex justify-between bg-[#F0EAE0] rounded px-2 py-1.5">
-                      <span className="text-muted-foreground">{k}</span>
-                      <span className="font-semibold">{v}</span>
+                  {selected.measurements.map((measurement) => (
+                    <div key={measurement.label} className="flex justify-between bg-[#F0EAE0] rounded px-2 py-1.5">
+                      <span className="text-muted-foreground">{measurement.label}</span>
+                      <span className="font-semibold">{measurement.value}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <button className="w-full border border-border py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2">
-                <Mail size={14}/> Send Message
-              </button>
+              <a href={`mailto:${selected.email}?subject=${encodeURIComponent("Aunty Sala Fashion Gh")}`} className="w-full border border-border py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2">
+                <Mail size={14}/> Email Customer
+              </a>
             </div>
           ) : (
             <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6 flex flex-col items-center justify-center h-48 text-center">
@@ -2134,15 +3103,15 @@ function AdminCustomers() {
 
 // ─── ADMIN ANALYTICS ───────────────────────────────────────────────────────
 function AdminAnalytics() {
-  const fabricData = [
-    { name: "Ankara", orders: 58, revenue: 32400 },
-    { name: "Kente", orders: 34, revenue: 28600 },
-    { name: "Batik", orders: 29, revenue: 17800 },
-  ];
-  const weeklyData = [
-    { day: "Mon", orders: 8 }, { day: "Tue", orders: 12 }, { day: "Wed", orders: 6 },
-    { day: "Thu", orders: 15 }, { day: "Fri", orders: 18 }, { day: "Sat", orders: 22 }, { day: "Sun", orders: 9 },
-  ];
+  const { orders, tailoringItems, salesData: SALES_DATA } = useAdminData();
+  const fabricMap = new Map<string, { name: string; orders: number; revenue: number }>();
+  orders.forEach((order) => {
+    const name = order.fabric || "Other";
+    const current = fabricMap.get(name) ?? { name, orders: 0, revenue: 0 };
+    current.orders += 1; current.revenue += order.amount; fabricMap.set(name, current);
+  });
+  const fabricData = [...fabricMap.values()];
+  const averageOrderValue = orders.length ? Math.round(orders.reduce((sum, order) => sum + order.amount, 0) / orders.length) : 0;
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
@@ -2153,9 +3122,9 @@ function AdminAnalytics() {
 
       {/* KPI Row */}
       <div className="grid grid-cols-3 gap-5 mb-8">
-        {[{ label: "Avg Order Value", value: "GH₵ 529" },
-          { label: "Returning Customers", value: "64%" },
-          { label: "Custom Orders %", value: "38%" }].map(m => (
+        {[{ label: "Avg Order Value", value: ghs(averageOrderValue) },
+          { label: "Total Orders", value: String(orders.length) },
+          { label: "Custom Orders", value: String(tailoringItems.length) }].map(m => (
           <div key={m.label} className="bg-card rounded-xl p-5 border border-border/50 shadow-sm text-center">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{m.label}</p>
             <p className="text-3xl font-bold text-[#C4562A]">{m.value}</p>
@@ -2181,11 +3150,11 @@ function AdminAnalytics() {
 
         {/* Weekly orders */}
         <div className="bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Orders This Week</h2>
+          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Orders by Month</h2>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={weeklyData}>
+            <LineChart data={SALES_DATA}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-              <XAxis dataKey="day" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip />
               <Line type="monotone" dataKey="orders" stroke="#C4562A" strokeWidth={2.5} dot={{ fill: "#C4562A", r: 4 }} />
@@ -2242,10 +3211,172 @@ function AdminAnalytics() {
   );
 }
 
+// ─── ADMIN NOTIFICATIONS ──────────────────────────────────────────────────
+function AdminNotifications() {
+  const { notifications, refresh } = useAdminData();
+  const [filter, setFilter] = useState("All");
+  const [dispatching, setDispatching] = useState(false);
+  const [message, setMessage] = useState("");
+  const filtered = filter === "All" ? notifications : notifications.filter((notification) => notification.status === filter);
+  const statuses = ["All", "Pending", "Processing", "Sent", "Failed"];
+  const handleDispatch = async () => {
+    setDispatching(true);
+    setMessage("");
+    await dispatchNotifications();
+    await refresh();
+    setDispatching(false);
+    setMessage("Notification queue checked.");
+  };
+  return (
+    <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="flex flex-wrap justify-between items-start gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Notifications</h1>
+          <p className="text-muted-foreground text-sm mt-1">Email and WhatsApp delivery history</p>
+        </div>
+        <button type="button" disabled={dispatching} onClick={() => void handleDispatch()} className="bg-[#C4562A] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
+          <Send size={14}/>{dispatching ? "Checking…" : "Run Delivery"}
+        </button>
+      </div>
+      {message && <p role="status" className="mb-4 text-sm text-green-700 bg-green-50 rounded-lg p-3">{message}</p>}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        {statuses.map((status) => <button key={status} type="button" onClick={() => setFilter(status)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filter === status ? "bg-[#C4562A] text-white border-[#C4562A]" : "border-border hover:border-[#C4562A]"}`}>{status}</button>)}
+      </div>
+      <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border">{["Event", "Channel", "Recipient", "Status", "Attempts", "Created"].map((heading) => <th key={heading} className="text-left px-5 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{heading}</th>)}</tr></thead>
+            <tbody>{filtered.map((notification) => <tr key={notification.id} className="border-b border-border/50 align-top">
+              <td className="px-5 py-4"><p className="font-semibold">{notification.eventType}</p>{notification.subject && <p className="text-xs text-muted-foreground mt-1">{notification.subject}</p>}{notification.lastError && <p className="text-xs text-red-600 mt-1 max-w-sm">{notification.lastError}</p>}</td>
+              <td className="px-5 py-4">{notification.channel}</td>
+              <td className="px-5 py-4 font-mono text-xs">{notification.recipient}</td>
+              <td className="px-5 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${notification.status === "Sent" ? "bg-green-50 text-green-700" : notification.status === "Failed" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>{notification.status}</span></td>
+              <td className="px-5 py-4">{notification.attempts}</td>
+              <td className="px-5 py-4 text-xs text-muted-foreground whitespace-nowrap">{notification.createdAt}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        {filtered.length === 0 && <p className="py-12 text-center text-sm text-muted-foreground">No notifications in this view.</p>}
+      </div>
+    </div>
+  );
+}
+
 // ─── ADMIN SETTINGS ────────────────────────────────────────────────────────
 function AdminSettings() {
+  const { settings, users, media, refresh } = useAdminData();
   const [tab, setTab] = useState("store");
-  const tabs = [["store","Store Info"],["shipping","Shipping"],["payment","Payments"],["users","User Roles"]];
+  const storeFields = [
+    ["store_name", "Store name"], ["store_email", "Store email"], ["store_phone", "Store phone"],
+    ["store_address", "Store address"], ["store_hours", "Store hours"],
+    ["instagram_handle", "Instagram handle"], ["whatsapp_number", "WhatsApp number"],
+    ["notification_admin_email", "Admin notification email"], ["notification_admin_whatsapp", "Admin notification WhatsApp"],
+  ] as const;
+  const settingText = (key: string) => {
+    const value = settings[key];
+    return typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
+  };
+  const [storeForm, setStoreForm] = useState<Record<string, string>>(() => Object.fromEntries(storeFields.map(([key]) => [key, settingText(key)])));
+  const [storeSaving, setStoreSaving] = useState(false);
+  const [storeMessage, setStoreMessage] = useState("");
+  const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminRole, setAdminRole] = useState<"staff" | "admin">("staff");
+  const [adminSaving, setAdminSaving] = useState(false);
+  const [adminMessage, setAdminMessage] = useState("");
+  const [mediaPlacement, setMediaPlacement] = useState("home_hero");
+  const [mediaAlt, setMediaAlt] = useState("");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [mediaSaving, setMediaSaving] = useState(false);
+  const [mediaMessage, setMediaMessage] = useState("");
+  const [mediaInputKey, setMediaInputKey] = useState(0);
+  const tabs = [["store","Store Info"],["media","Media"],["users","User Roles"]];
+  const mediaPlacements = [
+    "home_hero", "home_custom_banner", "shop_banner", "custom_order_banner",
+    "fabric_ankara", "fabric_kente", "fabric_batik", "fabric_mixed",
+    "about_story", "about_workshop", "about_fabric", "about_textiles",
+    "contact_banner", "contact_location", "gallery",
+  ];
+  useEffect(() => {
+    setStoreForm(Object.fromEntries(storeFields.map(([key]) => [key, settingText(key)])));
+  }, [settings]);
+  const handleStoreSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setStoreSaving(true);
+    setStoreMessage("");
+    try {
+      await saveStoreSettings(storeForm);
+      await refresh();
+      setStoreMessage("Store information saved.");
+    } catch (error) {
+      setStoreMessage(error instanceof Error ? error.message : "Store information could not be saved.");
+    } finally {
+      setStoreSaving(false);
+    }
+  };
+  const handleAddAdmin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAdminSaving(true);
+    setAdminMessage("");
+    try {
+      await addAdminUserByEmail(adminEmail, adminRole);
+      await refresh();
+      setAdminEmail("");
+      setShowAddAdmin(false);
+      setAdminMessage("Admin access added.");
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : "Admin access could not be added.");
+    } finally {
+      setAdminSaving(false);
+    }
+  };
+  const handleAccessChange = async (id: string, role: "staff" | "admin", active: boolean) => {
+    setAdminSaving(true);
+    setAdminMessage("");
+    try {
+      await setAdminUserAccess(id, role, active);
+      await refresh();
+      setAdminMessage("Admin access updated.");
+    } catch (error) {
+      setAdminMessage(error instanceof Error ? error.message : "Admin access could not be updated.");
+    } finally {
+      setAdminSaving(false);
+    }
+  };
+  const handleMediaSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!mediaFile) return;
+    setMediaSaving(true);
+    setMediaMessage("");
+    try {
+      const [asset] = await uploadManyToCloudinary([mediaFile], `aunty-sala-fashion-gh/${mediaPlacement === "gallery" ? "gallery" : "site"}`);
+      if (mediaPlacement === "gallery") await addGalleryMedia(mediaAlt, asset);
+      else await saveSiteMedia(mediaPlacement, mediaAlt, asset);
+      await refresh();
+      setMediaMessage("Media uploaded to Cloudinary and saved.");
+      setMediaFile(null);
+      setMediaAlt("");
+      setMediaInputKey((current) => current + 1);
+    } catch (error) {
+      setMediaMessage(error instanceof Error ? error.message : "The media could not be saved.");
+    } finally {
+      setMediaSaving(false);
+    }
+  };
+  const handleMediaRemove = async (kind: "site" | "gallery", id: string, label: string) => {
+    if (!window.confirm(`Remove ${label} from the site? The Cloudinary asset itself will be kept.`)) return;
+    setMediaSaving(true);
+    setMediaMessage("");
+    try {
+      await removeAdminMedia(kind, id);
+      await refresh();
+      setMediaMessage(`${label} was removed from the site.`);
+    } catch (error) {
+      setMediaMessage(error instanceof Error ? error.message : "The media could not be removed.");
+    } finally {
+      setMediaSaving(false);
+    }
+  };
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
@@ -2263,78 +3394,42 @@ function AdminSettings() {
       </div>
 
       {tab === "store" && (
-        <div className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
+        <form onSubmit={handleStoreSave} className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
           <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Store Information</h2>
           <div className="space-y-4">
-            {[["Store Name","Anty Sala Fashion GH"],["Email","hello@antysalafashion.com"],["Phone","+233 24 000 0000"],["Address","14 Cantonments Road, Osu, Accra, Ghana"],["Instagram","@antysalafashiongh"],["WhatsApp","+233 24 000 0001"]].map(([label,val]) => (
-              <div key={label}>
-                <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                <input defaultValue={val} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+            {storeFields.map(([key, label]) => (
+              <div key={key}>
+                <label htmlFor={`setting-${key}`} className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
+                <input id={`setting-${key}`} type={key === "store_email" ? "email" : "text"} value={storeForm[key] ?? ""} onChange={(event) => setStoreForm((current) => ({ ...current, [key]: event.target.value }))} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
               </div>
             ))}
           </div>
-          <button className="mt-5 bg-[#C4562A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">Save Changes</button>
-        </div>
-      )}
-
-      {tab === "shipping" && (
-        <div className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Delivery Zones</h2>
-          <div className="space-y-3">
-            {[{ zone: "Accra Metro", cost: "GH₵ 30", days: "Same day" },
-              { zone: "Greater Accra", cost: "GH₵ 50", days: "1–2 days" },
-              { zone: "Other Ghana Regions", cost: "GH₵ 80", days: "3–5 days" },
-              { zone: "UK & Europe", cost: "GH₵ 350", days: "7–14 days" },
-              { zone: "USA & Canada", cost: "GH₵ 400", days: "10–18 days" }].map(z => (
-              <div key={z.zone} className="flex items-center justify-between p-3 border border-border rounded-lg">
-                <div>
-                  <p className="font-semibold text-sm">{z.zone}</p>
-                  <p className="text-xs text-muted-foreground">{z.days}</p>
-                </div>
-                <span className="font-bold text-[#C4562A]">{z.cost}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 p-3 bg-[#F0EAE0] rounded-lg">
-            <p className="text-xs font-semibold text-[#B8922A]">Free delivery on orders over GH₵ 500 (Accra only)</p>
-          </div>
-        </div>
-      )}
-
-      {tab === "payment" && (
-        <div className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Payment Methods</h2>
-          <div className="space-y-3">
-            {[{ name: "MTN Mobile Money", active: true },
-              { name: "Vodafone Cash", active: true },
-              { name: "AirtelTigo Money", active: true },
-              { name: "Visa / Mastercard", active: true },
-              { name: "PayPal", active: false }].map(p => (
-              <div key={p.name} className="flex items-center justify-between p-4 border border-border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CreditCard size={16} className="text-muted-foreground" />
-                  <span className="font-medium text-sm">{p.name}</span>
-                </div>
-                <div className={`w-10 h-5 rounded-full relative transition-colors cursor-pointer ${p.active ? "bg-[#C4562A]" : "bg-muted"}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform ${p.active ? "translate-x-5" : "translate-x-0.5"}`} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+          {storeMessage && <p role="status" className="mt-4 text-sm text-muted-foreground">{storeMessage}</p>}
+          <button disabled={storeSaving} type="submit" className="mt-5 bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{storeSaving ? "Saving…" : "Save Changes"}</button>
+        </form>
       )}
 
       {tab === "users" && (
         <div className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
           <div className="flex justify-between mb-5">
             <h2 className="font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>Admin Users</h2>
-            <button className="text-xs bg-[#C4562A] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-1"><Plus size={12}/> Invite</button>
+            <button onClick={() => setShowAddAdmin((current) => !current)} className="text-xs bg-[#C4562A] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-1"><Plus size={12}/> Add admin</button>
           </div>
+          {showAddAdmin && (
+            <form onSubmit={handleAddAdmin} className="mb-4 p-3 bg-muted/40 rounded-lg space-y-3">
+              <p className="text-xs text-muted-foreground">The person must already have a customer account with this email.</p>
+              <input required type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="person@example.com" className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
+              <div className="flex gap-2">
+                <select value={adminRole} onChange={(event) => setAdminRole(event.target.value as "staff" | "admin")} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-card"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+                <button disabled={adminSaving} type="submit" className="bg-[#1A1A18] disabled:opacity-50 text-white px-4 rounded-lg text-xs font-semibold">{adminSaving ? "Adding…" : "Add access"}</button>
+              </div>
+            </form>
+          )}
+          {adminMessage && <p role="status" className="mb-3 text-xs text-muted-foreground">{adminMessage}</p>}
           <div className="space-y-3">
-            {[{ name: "Sala Mensah", email: "sala@antysalafashion.com", role: "Owner" },
-              { name: "Abena K.", email: "abena@antysalafashion.com", role: "Manager" },
-              { name: "Efua D.", email: "efua@antysalafashion.com", role: "Staff" }].map(u => (
-              <div key={u.name} className="flex items-center justify-between p-3 border border-border rounded-lg">
+            {users.map(u => (
+              <div key={u.id} className={`p-3 border border-border rounded-lg ${u.active ? "" : "opacity-60"}`}>
+                <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-[#C4562A]/10 rounded-full flex items-center justify-center text-xs font-bold text-[#C4562A]">{u.name.charAt(0)}</div>
                   <div>
@@ -2342,10 +3437,67 @@ function AdminSettings() {
                     <p className="text-xs text-muted-foreground">{u.email}</p>
                   </div>
                 </div>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${u.role === "Owner" ? "bg-[#B8922A]/10 text-[#B8922A]" : "bg-muted text-muted-foreground"}`}>{u.role}</span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${u.active ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"}`}>{u.active ? "Active" : "Inactive"}</span>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <select disabled={adminSaving} value={u.role.toLowerCase()} onChange={(event) => void handleAccessChange(u.id, event.target.value as "staff" | "admin", u.active)} className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs bg-card"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+                  <button disabled={adminSaving} onClick={() => void handleAccessChange(u.id, u.role.toLowerCase() as "staff" | "admin", !u.active)} className="border border-border rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-muted">{u.active ? "Deactivate" : "Reactivate"}</button>
+                </div>
               </div>
             ))}
+            {users.length === 0 && <p className="text-sm text-muted-foreground">No admin memberships found.</p>}
           </div>
+        </div>
+      )}
+
+      {tab === "media" && (
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(320px,420px)_1fr] gap-6">
+          <form onSubmit={handleMediaSave} className="bg-card rounded-xl p-6 border border-border/50 shadow-sm h-fit">
+            <h2 className="font-bold text-base mb-1" style={{ fontFamily: "var(--font-display)" }}>Upload or Replace Media</h2>
+            <p className="text-xs text-muted-foreground mb-5">Choosing an existing placement replaces its current storefront media. Gallery uploads create a new item.</p>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="media-placement" className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Placement</label>
+                <select id="media-placement" value={mediaPlacement} onChange={(event) => setMediaPlacement(event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card">
+                  {mediaPlacements.map((placement) => <option key={placement} value={placement}>{placement.replace(/_/g, " ")}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="media-alt" className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Alt text</label>
+                <input id="media-alt" required value={mediaAlt} onChange={(event) => setMediaAlt(event.target.value)} placeholder="Describe the image for accessibility" className="w-full border border-border rounded-lg px-4 py-3 text-sm" />
+              </div>
+              <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg px-4 py-8 text-sm text-muted-foreground cursor-pointer hover:border-[#C4562A]">
+                <input key={mediaInputKey} required type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" className="sr-only" onChange={(event) => setMediaFile(event.target.files?.[0] ?? null)} />
+                <Upload size={16} /> {mediaFile?.name ?? "Choose an image or video"}
+              </label>
+            </div>
+            {mediaMessage && <p role="status" className="mt-4 text-sm text-muted-foreground">{mediaMessage}</p>}
+            <button disabled={mediaSaving || !mediaFile || !mediaAlt.trim()} type="submit" className="mt-5 w-full bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">
+              {mediaSaving ? "Uploading…" : mediaPlacement === "gallery" ? "Add to Gallery" : "Upload & Replace"}
+            </button>
+          </form>
+
+          <section className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+              <div><h2 className="font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>Current Media</h2><p className="text-xs text-muted-foreground mt-0.5">{media.length} active item{media.length === 1 ? "" : "s"}</p></div>
+            </div>
+            {media.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground"><Upload size={28} className="mx-auto mb-2 opacity-40"/>No site or gallery media has been added yet.</div> : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 p-5">
+                {media.map((item) => <article key={`${item.kind}-${item.id}`} className="rounded-xl border border-border overflow-hidden bg-background">
+                  <div className="aspect-video bg-muted overflow-hidden">
+                    {item.resourceType === "video" ? <video src={item.url} controls className="w-full h-full object-cover" /> : <img src={item.url} alt={item.altText} className="w-full h-full object-cover" />}
+                  </div>
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-semibold text-sm capitalize truncate">{item.placement.replace(/_/g, " ")}</p><p className="text-xs text-muted-foreground truncate">{item.altText || "No alt text"}</p></div><span className="text-[10px] uppercase font-bold text-[#B8922A]">{item.kind}</span></div>
+                    <div className="flex gap-2 mt-3">
+                      {item.kind === "site" && <button type="button" onClick={() => { setMediaPlacement(item.placement); setMediaAlt(item.altText); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex-1 border border-border rounded-lg py-1.5 text-xs font-semibold hover:bg-muted">Replace</button>}
+                      <button disabled={mediaSaving} type="button" onClick={() => void handleMediaRemove(item.kind, item.id, item.placement.replace(/_/g, " "))} className="p-2 border border-border rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${item.placement.replace(/_/g, " ")}`}><Trash2 size={13}/></button>
+                    </div>
+                  </div>
+                </article>)}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>
@@ -2353,15 +3505,160 @@ function AdminSettings() {
 }
 
 // ─── MAIN APP ──────────────────────────────────────────────────────────────
+const PAGE_PATHS: Record<string, string> = {
+  home: "/",
+  shop: "/shop",
+  custom: "/custom-order",
+  cart: "/cart",
+  checkout: "/checkout",
+  account: "/account",
+  about: "/about",
+  contact: "/contact",
+  "help-sizing": "/help/sizing",
+  "help-fabric-care": "/help/fabric-care",
+  "help-returns": "/help/returns",
+  "help-faqs": "/help/faqs",
+};
+
+function routeFromPath(pathname: string) {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  const productMatch = path.match(/^\/product\/([^/]+)$/);
+  if (productMatch) {
+    return { page: `product-${productMatch[1]}`, adminPage: "dashboard", isAdmin: false };
+  }
+
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    const requestedAdminPage = path.split("/")[2] || "dashboard";
+    const adminPage = ADMIN_LINKS.some((link) => link.key === requestedAdminPage)
+      ? requestedAdminPage
+      : "dashboard";
+    return { page: "home", adminPage, isAdmin: true };
+  }
+
+  const page = Object.entries(PAGE_PATHS).find(([, routePath]) => routePath === path)?.[0]
+    ?? (path === "/custom" ? "custom" : "home");
+  return { page, adminPage: "dashboard", isAdmin: false };
+}
+
+function pathFromPage(page: string) {
+  if (page.startsWith("product-")) return `/product/${page.replace("product-", "")}`;
+  return PAGE_PATHS[page] ?? "/";
+}
+
 export default function App() {
-  const [page, setPage] = useState("home");
-  const [adminPage, setAdminPage] = useState("dashboard");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const initialRoute = routeFromPath(window.location.pathname);
+  const [page, setPage] = useState(initialRoute.page);
+  const [adminPage, setAdminPage] = useState(initialRoute.adminPage);
+  const [isAdmin, setIsAdmin] = useState(initialRoute.isAdmin);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    try {
+      const stored = window.localStorage.getItem("aunty-sala-cart");
+      const parsed = stored ? JSON.parse(stored) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [promoCode, setPromoCode] = useState("");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [storeContent, setStoreContent] = useState<{ testimonials: Testimonial[]; gallery: GalleryItem[]; settings: Record<string, unknown>; siteMedia: Record<string, string> }>({ testimonials: [], gallery: [], settings: {}, siteMedia: {} });
+  const [storeLoading, setStoreLoading] = useState(true);
+  const [storeError, setStoreError] = useState("");
+  const [adminData, setAdminData] = useState<AdminData>(EMPTY_ADMIN_DATA);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState("");
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([getProducts(), getStoreContent()])
+      .then(([databaseProducts, content]) => {
+        if (active) {
+          setProducts(databaseProducts);
+          setStoreContent(content);
+          setStoreLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setStoreError(error instanceof Error ? error.message : "Unable to load the store.");
+          setStoreLoading(false);
+        }
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("aunty-sala-cart", JSON.stringify(cartItems));
+  }, [cartItems]);
+
+  useEffect(() => {
+    if (!isAdmin || !session) return;
+    setAdminLoading(true);
+    setAdminError("");
+    getAdminData()
+      .then(setAdminData)
+      .catch((error) => setAdminError(error instanceof Error ? error.message : "Unable to load admin data."))
+      .finally(() => setAdminLoading(false));
+  }, [isAdmin, session]);
+
+  useEffect(() => {
+    let active = true;
+    if (!session) {
+      setWishlistIds([]);
+      return;
+    }
+    getWishlistProductIds()
+      .then((ids) => { if (active) setWishlistIds(ids); })
+      .catch(() => { if (active) setWishlistIds([]); });
+    return () => { active = false; };
+  }, [session]);
+
+  useEffect(() => {
+    if (!supabase) {
+      setAuthLoading(false);
+      return;
+    }
+
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (session) void dispatchNotifications();
+  }, [session?.user.id]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [page, isAdmin, adminPage]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    document.title = "Admin Portal | Aunty Sala Fashion Gh";
+    document.head.querySelector<HTMLMetaElement>('meta[name="robots"]')?.setAttribute("content", "noindex, nofollow");
+  }, [isAdmin]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const route = routeFromPath(window.location.pathname);
+      setPage(route.page);
+      setAdminPage(route.adminPage);
+      setIsAdmin(route.isAdmin);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const addToCart = (product: Product) => {
     setCartItems(prev => {
@@ -2373,18 +3670,54 @@ export default function App() {
     });
   };
 
-  const setPageNav = (p: string) => {
-    // Handle product detail pages: "product-{id}"
-    setPage(p);
+  const navigateTo = (path: string) => {
+    if (window.location.pathname !== path) window.history.pushState({}, "", path);
+    const route = routeFromPath(path);
+    setPage(route.page);
+    setAdminPage(route.adminPage);
+    setIsAdmin(route.isAdmin);
+  };
+
+  const setPageNav = (nextPage: string) => navigateTo(pathFromPage(nextPage));
+  const setAdminPageNav = (nextPage: string) => navigateTo(nextPage === "dashboard" ? "/admin" : `/admin/${nextPage}`);
+  const handleSignOut = async () => {
+    await supabase?.auth.signOut();
+    navigateTo("/");
+  };
+  const refreshAdminData = async () => {
+    setAdminData(await getAdminData());
+  };
+
+  const toggleWishlistItem = async (productId: string) => {
+    if (!session) throw new Error("AUTH_REQUIRED");
+    const wasSaved = wishlistIds.includes(productId);
+    setWishlistIds((current) => wasSaved ? current.filter((id) => id !== productId) : [...current, productId]);
+    try {
+      if (wasSaved) await removeWishlistItem(productId);
+      else await addWishlistItem(productId);
+    } catch (error) {
+      setWishlistIds((current) => wasSaved
+        ? (current.includes(productId) ? current : [...current, productId])
+        : current.filter((id) => id !== productId));
+      throw error;
+    }
   };
 
   // Extract product ID from page string
-  const productId = page.startsWith("product-") ? parseInt(page.replace("product-", "")) : 0;
+  const productSlug = page.startsWith("product-") ? page.replace("product-", "") : "";
+  const seoProduct = productSlug ? products.find((product) => product.slug === productSlug) : undefined;
 
   if (isAdmin) {
+    if (authLoading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Checking your session…</div>;
+    if (!session) return <LoginPage />;
+    if (adminLoading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading admin data…</div>;
+    if (adminError) return <div className="min-h-screen flex flex-col gap-4 items-center justify-center"><p className="text-red-600">{adminError}</p><button onClick={() => navigateTo("/")} className="text-[#C4562A] font-semibold">Back to store</button></div>;
     return (
+      <ProductsContext.Provider value={products}>
+      <AdminDataContext.Provider value={{ ...adminData, refresh: refreshAdminData }}>
       <div className="flex min-h-screen bg-background" style={{ fontFamily: "var(--font-body)" }}>
-        <AdminSidebar page={adminPage} setPage={setAdminPage} onExit={() => setIsAdmin(false)} />
+        <SeoHead page="admin" settings={storeContent.settings} isAdmin />
+        <AdminSidebar page={adminPage} setPage={setAdminPageNav} onExit={() => navigateTo("/")} />
         <main className="flex-1 min-w-0 overflow-auto">
           {/* Admin Header */}
           <div className="sticky top-0 z-20 bg-background border-b border-border px-8 py-3 flex items-center justify-between">
@@ -2392,47 +3725,63 @@ export default function App() {
               {ADMIN_LINKS.find(l => l.key === adminPage)?.label || "Admin"}
             </p>
             <div className="flex items-center gap-3">
-              <button className="relative p-2 hover:bg-muted rounded-lg transition-colors">
+              <button onClick={() => setAdminPageNav("orders")} aria-label="View orders requiring attention" className="relative p-2 hover:bg-muted rounded-lg transition-colors">
                 <Bell size={18} />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-[#C4562A] rounded-full" />
+                {adminData.orders.some((order) => ["Paid", "Processing"].includes(order.status)) && <span className="absolute top-1 right-1 w-2 h-2 bg-[#C4562A] rounded-full" />}
               </button>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#C4562A]/10 rounded-full flex items-center justify-center text-sm font-bold text-[#C4562A]">S</div>
-                <span className="text-sm font-semibold hidden sm:block">Sala M.</span>
+                <div className="w-8 h-8 bg-[#C4562A]/10 rounded-full flex items-center justify-center text-sm font-bold text-[#C4562A]">{session.user.email?.charAt(0).toUpperCase()}</div>
+                <span className="text-sm font-semibold hidden sm:block">{session.user.email}</span>
               </div>
             </div>
           </div>
-          {adminPage === "dashboard" && <AdminDashboard setPage={setAdminPage} />}
+          {adminPage === "dashboard" && <AdminDashboard setPage={setAdminPageNav} />}
           {adminPage === "products" && <AdminProducts />}
           {adminPage === "orders" && <AdminOrders />}
           {adminPage === "custom-orders" && <AdminCustomOrders />}
           {adminPage === "customers" && <AdminCustomers />}
           {adminPage === "analytics" && <AdminAnalytics />}
+          {adminPage === "notifications" && <AdminNotifications />}
           {adminPage === "settings" && <AdminSettings />}
         </main>
       </div>
+      </AdminDataContext.Provider>
+      </ProductsContext.Provider>
     );
   }
 
   return (
+    <ProductsContext.Provider value={products}>
+    <StoreContentContext.Provider value={storeContent}>
+    <WishlistContext.Provider value={{ ids: wishlistIds, toggle: toggleWishlistItem, isAuthenticated: Boolean(session) }}>
     <div className="bg-background min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
-      <CustomerNav page={page} setPage={setPageNav} cartCount={cartItems.reduce((s,i) => s + i.qty, 0)} onAdminEnter={() => setIsAdmin(true)} />
-      {page === "home" && <HomePage setPage={setPageNav} addToCart={addToCart} />}
-      {page === "shop" && <ShopPage setPage={setPageNav} addToCart={addToCart} />}
-      {page.startsWith("product-") && <ProductDetailPage productId={productId} setPage={setPageNav} addToCart={addToCart} />}
+      <SeoHead page={page} product={seoProduct} settings={storeContent.settings} />
+      <CustomerNav page={page} setPage={setPageNav} cartCount={cartItems.reduce((s,i) => s + i.qty, 0)} onAdminEnter={() => navigateTo("/admin")} isAuthenticated={Boolean(session)} />
+      {storeLoading && <div className="min-h-screen pt-24 flex items-center justify-center text-muted-foreground">Loading store…</div>}
+      {storeError && <div className="min-h-screen pt-24 flex items-center justify-center text-red-600">{storeError}</div>}
+      {!storeLoading && !storeError && page === "home" && <HomePage setPage={setPageNav} addToCart={addToCart} />}
+      {!storeLoading && !storeError && page === "shop" && <ShopPage setPage={setPageNav} addToCart={addToCart} />}
+      {!storeLoading && !storeError && page.startsWith("product-") && <ProductDetailPage productSlug={productSlug} setPage={setPageNav} addToCart={addToCart} />}
       {page === "custom" && <CustomOrderPage />}
-      {page === "cart" && <CartPage cartItems={cartItems} setCartItems={setCartItems} setPage={setPageNav} />}
-      {page === "checkout" && <CheckoutPage cartItems={cartItems} setPage={setPageNav} />}
-      {page === "account" && <AccountPage />}
+      {page === "cart" && <CartPage cartItems={cartItems} setCartItems={setCartItems} setPage={setPageNav} promoCode={promoCode} setPromoCode={setPromoCode} />}
+      {page === "checkout" && (authLoading
+        ? <div className="min-h-screen pt-24 flex items-center justify-center text-sm text-muted-foreground">Checking your session…</div>
+        : session
+          ? <CheckoutPage cartItems={cartItems} setPage={setPageNav} session={session} promoCode={promoCode} onOrderPlaced={() => { setCartItems([]); setPromoCode(""); }} />
+          : <LoginPage redirectPath="/checkout" />)}
+      {page === "account" && (authLoading
+        ? <div className="min-h-screen pt-24 flex items-center justify-center text-sm text-muted-foreground">Loading your account…</div>
+        : session
+          ? <AccountPage session={session} onSignOut={handleSignOut} />
+          : <LoginPage />)}
       {page === "about" && <AboutPage />}
-      {page === "contact" && <ContactPage />}
+      {page.startsWith("help-") && <HelpPage section={page.replace("help-", "") as HelpSection} setPage={setPageNav} />}
+      {!storeLoading && !storeError && page === "contact" && <ContactPage />}
 
-      {/* Admin quick access (footer level) */}
       <CustomerFooter setPage={setPageNav} />
-      <button onClick={() => setIsAdmin(true)}
-        className="fixed bottom-5 right-5 bg-[#1A1A18] text-white text-xs px-4 py-2.5 rounded-full shadow-lg hover:bg-[#2A2A20] transition-colors flex items-center gap-1.5 z-40">
-        <Settings size={12}/> Admin Portal
-      </button>
     </div>
+    </WishlistContext.Provider>
+    </StoreContentContext.Provider>
+    </ProductsContext.Provider>
   );
 }
