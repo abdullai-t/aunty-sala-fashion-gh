@@ -31,7 +31,8 @@ Deno.serve(async (request) => {
     if (!verifyResponse.ok || verification.data?.status !== "success") throw new Error("Paystack verification failed.");
 
     const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, envKey("secret"), { auth: { persistSession: false } });
-    const { error } = await adminClient.rpc("finalize_paid_checkout", {
+    const isCustomPayment = String(verification.data.reference).startsWith("ASFC-");
+    const { error } = await adminClient.rpc(isCustomPayment ? "finalize_custom_order_payment" : "finalize_paid_checkout", {
       paystack_reference_input: verification.data.reference,
       amount_minor_input: verification.data.amount,
       currency_input: verification.data.currency,

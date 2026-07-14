@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type FormEvent } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   getProducts,
@@ -11,6 +11,9 @@ import {
   submitContactMessage,
   submitCustomOrder,
   updateCustomOrderStatus,
+  setCustomOrderQuote,
+  initializeCustomOrderPayment,
+  verifyCustomOrderPayment,
   createProduct,
   createCategory,
   updateProduct,
@@ -34,6 +37,7 @@ import {
   dispatchNotifications,
   type AccountData,
   type AdminData,
+  type AdminOrder,
   type GalleryItem,
   type StoreProduct,
   type Testimonial,
@@ -66,7 +70,7 @@ const WishlistContext = createContext<{ ids: string[]; toggle: (productId: strin
 const useWishlist = () => useContext(WishlistContext);
 const StoreContentContext = createContext<{ testimonials: Testimonial[]; gallery: GalleryItem[]; settings: Record<string, unknown>; siteMedia: Record<string, string> }>({ testimonials: [], gallery: [], settings: {}, siteMedia: {} });
 const useStoreContent = () => useContext(StoreContentContext);
-const EMPTY_ADMIN_DATA: AdminData = { orders: [], customers: [], tailoringItems: [], salesData: [], categoryData: [], categories: [], products: [], media: [], notifications: [], settings: {}, users: [] };
+const EMPTY_ADMIN_DATA: AdminData = { orders: [], customPayments: [], customers: [], tailoringItems: [], salesData: [], categoryData: [], categories: [], products: [], media: [], notifications: [], settings: {}, users: [] };
 type AdminDataContextValue = AdminData & { refresh: () => Promise<void> };
 const AdminDataContext = createContext<AdminDataContextValue>({ ...EMPTY_ADMIN_DATA, refresh: async () => {} });
 const useAdminData = () => useContext(AdminDataContext);
@@ -145,6 +149,8 @@ function SeoHead({ page, product, settings, isAdmin = false }: { page: string; p
       "help-fabric-care": { title: "African Fabric Care Guide | Aunty Sala Fashion Gh", description: "Learn how to wash, dry, iron, and care for Ankara, kente, batik, and other African-fabric garments." },
       "help-returns": { title: "Returns Policy | Aunty Sala Fashion Gh", description: "Read the returns, exchanges, alterations, and custom-order policy for Aunty Sala Fashion Gh." },
       "help-faqs": { title: "Frequently Asked Questions | Aunty Sala Fashion Gh", description: "Answers about custom orders, sizing, worldwide delivery, order tracking, and Ghanaian fashion from Aunty Sala." },
+      "privacy-policy": { title: "Privacy Policy | Aunty Sala Fashion Gh", description: "Learn how Aunty Sala Fashion Gh collects, uses, protects, and shares personal information when you use our store." },
+      "terms-of-service": { title: "Terms of Service | Aunty Sala Fashion Gh", description: "Read the terms that apply when you browse, create an account, or place an order with Aunty Sala Fashion Gh." },
       account: { title: "My Account | Aunty Sala Fashion Gh", description: "Manage your Aunty Sala Fashion Gh account and orders." },
       cart: { title: "Shopping Cart | Aunty Sala Fashion Gh", description: "Review the items in your Aunty Sala Fashion Gh shopping cart." },
       checkout: { title: "Secure Checkout | Aunty Sala Fashion Gh", description: "Complete your Aunty Sala Fashion Gh order securely." },
@@ -471,8 +477,12 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
           )}
         </div>
       </div>
-      <div className="border-t border-white/10 max-w-7xl mx-auto px-6 lg:px-10 py-5 flex flex-col sm:flex-row justify-between items-center gap-2 text-xs text-[#FAF7F2]/40">
+      <div className="border-t border-white/10 max-w-7xl mx-auto px-6 lg:px-10 py-5 flex flex-col lg:flex-row justify-between items-center gap-3 text-xs text-[#FAF7F2]/40">
         <p>© {new Date().getFullYear()} Aunty Sala Fashion Gh. All rights reserved.</p>
+        <div className="flex items-center gap-4">
+          <button type="button" onClick={() => setPage("privacy-policy")} className="hover:text-[#FAF7F2] transition-colors">Privacy Policy</button>
+          <button type="button" onClick={() => setPage("terms-of-service")} className="hover:text-[#FAF7F2] transition-colors">Terms of Service</button>
+        </div>
         <p>Designed & crafted in Accra, Ghana 🇬🇭</p>
       </div>
     </footer>
@@ -521,6 +531,19 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
       </section>
 
       <KenteStripe />
+
+      {/* Store purpose */}
+      <section className="bg-[#FAF7F2] px-6 lg:px-10 py-14" aria-labelledby="store-purpose-heading">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">About This Store</p>
+          <h2 id="store-purpose-heading" className="text-3xl md:text-4xl font-bold mb-5" style={{ fontFamily: "var(--font-display)" }}>
+            Ghanaian fashion, made personal
+          </h2>
+          <p className="max-w-3xl mx-auto text-muted-foreground leading-relaxed">
+            Aunty Sala Fashion Gh is an online fashion store for discovering ready-to-wear pieces, requesting made-to-measure dresses, saving favourites, placing secure orders, and tracking each order from creation to delivery.
+          </p>
+        </div>
+      </section>
 
       {/* Featured Collections */}
       <section className="py-20 px-6 lg:px-10 max-w-7xl mx-auto">
@@ -703,7 +726,7 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
   return (
     <div className="min-h-screen pt-16" style={{ fontFamily: "var(--font-body)" }}>
       {/* Page Header */}
-      <div className="bg-[#1A1A18] py-14 px-6 lg:px-10 text-center relative overflow-hidden">
+      <div className="bg-[#1A1A18] min-h-[280px] md:min-h-[360px] px-6 lg:px-10 text-center relative overflow-hidden flex items-center justify-center">
         <ManagedImage src={siteMedia.shop_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
         <div className="relative z-10">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Our Collection</p>
@@ -1097,7 +1120,7 @@ function CustomOrderPage() {
 
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="bg-[#1A1A18] py-12 px-6 text-center relative overflow-hidden">
+      <div className="bg-[#1A1A18] min-h-[280px] md:min-h-[360px] px-6 text-center relative overflow-hidden flex items-center justify-center">
         <ManagedImage src={siteMedia.custom_order_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
         <div className="relative z-10">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Bespoke Service</p>
@@ -1838,6 +1861,8 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
   const [accountError, setAccountError] = useState("");
   const [accountMessage, setAccountMessage] = useState("");
   const [accountSaving, setAccountSaving] = useState(false);
+  const [customPaymentLoadingId, setCustomPaymentLoadingId] = useState<string | null>(null);
+  const [customPaymentVerifying, setCustomPaymentVerifying] = useState(false);
   const [editingMeasurements, setEditingMeasurements] = useState(false);
   const [measurementForm, setMeasurementForm] = useState({ bust: "", waist: "", hips: "", height: "", shoulderWidth: "", armLength: "" });
   const [editingAddress, setEditingAddress] = useState<SavedAddress | "new" | null>(null);
@@ -1851,8 +1876,27 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
   useEffect(() => {
     refreshAccount().catch((error) => setAccountError(error instanceof Error ? error.message : "Unable to load your account."));
   }, [session.user.id]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (!reference?.startsWith("ASFC-")) return;
+    setCustomPaymentVerifying(true);
+    setAccountError("");
+    verifyCustomOrderPayment(reference)
+      .then(async (result) => {
+        if (!result.paid) throw new Error(`Payment is ${result.status}. If you completed it, wait a moment and refresh.`);
+        await refreshAccount();
+        setAccountMessage(`Payment verified for ${result.customOrderReference ?? "your custom order"}.`);
+      })
+      .catch((error) => setAccountError(error instanceof Error ? error.message : "Custom payment verification failed."))
+      .finally(() => {
+        setCustomPaymentVerifying(false);
+        window.history.replaceState({}, "", "/account");
+      });
+  }, [session.user.id]);
   const orders = accountData?.orders ?? [];
   const statusSteps = ["Created","Paid","Processing","Shipped","Delivered"];
+  const customStatusSteps = ["Submitted", "Reviewing", "Quoted", "In Production", "Ready", "Completed"];
   const beginMeasurementEdit = () => {
     const byLabel = new Map((accountData?.measurements ?? []).map((item) => [item.label, item.value.replace(/[^0-9.]/g, "")]));
     setMeasurementForm({
@@ -1892,6 +1936,18 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
     } catch (error) { setAccountError(error instanceof Error ? error.message : "The address could not be saved."); }
     finally { setAccountSaving(false); }
   };
+  const handleCustomPayment = async (customOrderId: string) => {
+    setCustomPaymentLoadingId(customOrderId);
+    setAccountError("");
+    setAccountMessage("");
+    try {
+      const payment = await initializeCustomOrderPayment(customOrderId, `${window.location.origin}/account`);
+      window.location.assign(payment.authorizationUrl);
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : "The custom payment could not be started.");
+      setCustomPaymentLoadingId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen pt-20 pb-16" style={{ fontFamily: "var(--font-body)" }}>
@@ -1922,6 +1978,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
 
         {accountError && <p role="alert" className="mb-6 rounded-lg bg-red-50 text-red-600 p-4 text-sm">{accountError}</p>}
         {accountMessage && <p role="status" className="mb-6 rounded-lg bg-green-50 text-green-700 p-4 text-sm">{accountMessage}</p>}
+        {customPaymentVerifying && <p role="status" className="mb-6 rounded-lg bg-amber-50 text-amber-800 p-4 text-sm">Verifying your custom-order payment…</p>}
         {!accountData && !accountError && <p className="py-12 text-center text-sm text-muted-foreground">Loading account data…</p>}
 
         {accountData && tab === "orders" && (
@@ -1929,40 +1986,129 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
             {orders.length === 0 && <p className="py-12 text-center text-muted-foreground">You have no orders yet.</p>}
             {orders.map(o => {
               const expanded = expandedOrderId === o.id;
-              const stepIdx = o.status === "Cancelled" ? 0 : statusSteps.indexOf(o.status);
+              const customProgressStatus = ["Measuring", "Cutting", "Sewing", "Fitting"].includes(o.status) ? "In Production" : o.status;
+              const progressSteps = o.isCustom ? customStatusSteps : statusSteps;
+              const stepIdx = o.status === "Cancelled" ? 0 : progressSteps.indexOf(customProgressStatus);
+              const custom = o.customDetails;
+              const quotedTotal = custom?.quotedPrice ?? 0;
+              const paidAmount = custom?.amountPaid ?? 0;
+              const balance = Math.max(quotedTotal - paidAmount, 0);
+              const isDepositDue = custom?.paymentPlan === "deposit" && paidAmount === 0;
+              const nextPayment = isDepositDue
+                ? Math.round(quotedTotal * (custom?.depositPercentage ?? 0)) / 100
+                : balance;
+              const canPayCustom = Boolean(
+                custom
+                && quotedTotal > 0
+                && balance > 0
+                && ["sent", "accepted"].includes(custom.quoteStatus)
+                && custom.paymentStatus !== "paid",
+              );
               return (
                 <div key={o.id} className="bg-card rounded-xl border border-border/40 shadow-sm overflow-hidden">
                   <button type="button" onClick={() => setExpandedOrderId(expanded ? null : o.id)} aria-expanded={expanded} aria-controls={`order-${o.id}`}
                     className="w-full p-5 md:p-6 flex flex-wrap items-center justify-between gap-4 text-left hover:bg-muted/30 transition-colors">
                     <div className="min-w-0">
-                      <p className="font-bold text-sm">{o.id}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{o.date} · {o.itemDetails.length} {o.itemDetails.length === 1 ? "item" : "items"}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-sm font-mono">{o.id}</p>
+                        {o.isCustom && <span className="rounded-full bg-[#B8922A]/15 text-[#7A5D10] px-2 py-0.5 text-[9px] font-bold tracking-wider">CUSTOM ORDER</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{o.date} · {o.isCustom ? o.items : `${o.itemDetails.length} ${o.itemDetails.length === 1 ? "item" : "items"}`}</p>
                     </div>
                     <div className="flex items-center gap-3 ml-auto">
-                      <span className="font-bold text-[#C4562A]">{ghs(o.amount)}</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${statusColor[o.status] || "bg-gray-50 text-gray-600"}`}>{o.status}</span>
+                      <span className={`font-bold ${o.amount == null ? "text-xs text-muted-foreground" : "text-[#C4562A]"}`}>{o.amount == null ? "Quote pending" : ghs(o.amount)}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${o.status === "Cancelled" ? statusColor.Cancelled : o.isCustom ? "bg-[#B8922A]/15 text-[#7A5D10]" : statusColor[o.status] || "bg-gray-50 text-gray-600"}`}>{o.status}</span>
                       <ChevronDown size={18} className={`text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
                     </div>
                   </button>
                   {expanded && (
                     <div id={`order-${o.id}`} className="border-t border-border/60 p-5 md:p-6">
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Order items</h3>
-                      <div className="divide-y divide-border rounded-xl border border-border overflow-hidden mb-6">
-                        {o.itemDetails.map((item, index) => (
-                          <div key={`${item.name}-${index}`} className="p-4 flex items-start justify-between gap-4 bg-background">
+                      {o.isCustom && o.customDetails ? (
+                        <div className="mb-6">
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Custom order details</h3>
+                          <div className="rounded-xl border border-border overflow-hidden bg-background">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-border">
+                              {[
+                                ["Style", o.customDetails.style], ["Fabric", o.customDetails.fabric],
+                                ["Occasion", o.customDetails.occasion], ["Budget", o.customDetails.budget],
+                                ["Due date", o.customDetails.dueDate],
+                              ].filter(([, value]) => value).map(([label, value]) => (
+                                <div key={label} className="bg-background p-4">
+                                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">{label}</p>
+                                  <p className="text-sm font-semibold">{value}</p>
+                                </div>
+                              ))}
+                            </div>
+                            {o.customDetails.measurements.length > 0 && <div className="border-t border-border p-4">
+                              <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2">Submitted measurements</p>
+                              <div className="flex flex-wrap gap-2">{o.customDetails.measurements.map((measurement) => <span key={measurement.label} className="rounded-lg bg-[#F0EAE0] px-3 py-2 text-xs"><strong>{measurement.label}:</strong> {measurement.value}</span>)}</div>
+                            </div>}
+                            {o.customDetails.notes && <div className="border-t border-border p-4"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Notes</p><p className="text-sm text-muted-foreground leading-relaxed">{o.customDetails.notes}</p></div>}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Order items</h3>
+                          <div className="divide-y divide-border rounded-xl border border-border overflow-hidden mb-6">
+                            {o.itemDetails.map((item, index) => (
+                              <div key={`${item.name}-${index}`} className="p-4 flex items-start justify-between gap-4 bg-background">
+                                <div>
+                                  <p className="font-semibold text-sm">{item.name}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Quantity: {item.quantity}{item.size ? ` · Size: ${item.size}` : ""}{item.color ? ` · Colour: ${item.color}` : ""}
+                                  </p>
+                                </div>
+                                <p className="font-bold text-sm shrink-0">{ghs(item.unitPrice * item.quantity)}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      {o.isCustom && custom && (
+                        <div className="mb-6 rounded-xl border border-[#C4562A]/25 bg-[#FFF8F3] p-4 md:p-5">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
-                              <p className="font-semibold text-sm">{item.name}</p>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                Quantity: {item.quantity}{item.size ? ` · Size: ${item.size}` : ""}{item.color ? ` · Colour: ${item.color}` : ""}
+                              <h3 className="text-xs font-bold uppercase tracking-wider text-[#9B3F1D]">Quote &amp; payment</h3>
+                              <p className="mt-1 text-sm text-muted-foreground">
+                                {custom.quoteStatus === "pending"
+                                  ? "Our team is reviewing your request. Your quote will appear here when it is ready."
+                                  : custom.paymentStatus === "paid"
+                                    ? "Your custom order is fully paid."
+                                    : isDepositDue
+                                      ? `${custom.depositPercentage}% deposit is due to begin production.`
+                                      : paidAmount > 0
+                                        ? "Your remaining balance is ready for payment."
+                                        : "Pay the full quote to begin production."}
                               </p>
                             </div>
-                            <p className="font-bold text-sm shrink-0">{ghs(item.unitPrice * item.quantity)}</p>
+                            <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${custom.paymentStatus === "paid" ? "bg-green-100 text-green-700" : custom.paymentStatus === "partially_paid" ? "bg-amber-100 text-amber-800" : "bg-white text-muted-foreground border border-border"}`}>
+                              {custom.paymentStatus.replace("_", " ")}
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">Order status</h3>
+                          {quotedTotal > 0 && (
+                            <div className="mt-4 grid grid-cols-3 gap-3 rounded-lg bg-white p-3 border border-border/60">
+                              <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Quote</p><p className="mt-1 text-sm font-bold">{ghs(quotedTotal)}</p></div>
+                              <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Paid</p><p className="mt-1 text-sm font-bold text-green-700">{ghs(paidAmount)}</p></div>
+                              <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Balance</p><p className="mt-1 text-sm font-bold text-[#C4562A]">{ghs(balance)}</p></div>
+                            </div>
+                          )}
+                          {canPayCustom && (
+                            <button
+                              type="button"
+                              disabled={customPaymentLoadingId === custom.customOrderId || customPaymentVerifying}
+                              onClick={() => handleCustomPayment(custom.customOrderId)}
+                              className="mt-4 w-full rounded-lg bg-[#1A1A18] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#C4562A] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {customPaymentLoadingId === custom.customOrderId
+                                ? "Opening secure payment…"
+                                : `Pay ${isDepositDue ? "deposit" : paidAmount > 0 ? "balance" : "quote"} — ${ghs(nextPayment)}`}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">{o.isCustom ? "Custom order status" : "Order status"}</h3>
                       <div className="flex items-center overflow-x-auto pb-1">
-                        {statusSteps.map((status, index) => {
+                        {progressSteps.map((status, index) => {
                           const done = index <= stepIdx;
                           return (
                             <div key={status} className="flex items-center shrink-0">
@@ -1972,7 +2118,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                                 </div>
                                 <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${done ? "text-[#C4562A]" : "text-muted-foreground"}`}>{status}</span>
                               </div>
-                              {index < statusSteps.length - 1 && (
+                              {index < progressSteps.length - 1 && (
                                 <div className={`w-12 h-0.5 mx-1 ${index < stepIdx ? "bg-[#C4562A]" : "bg-border"}`} />
                               )}
                             </div>
@@ -2221,6 +2367,157 @@ function HelpPage({ section, setPage }: { section: HelpSection; setPage: (page: 
   );
 }
 
+type LegalPageKind = "privacy-policy" | "terms-of-service";
+
+function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: string) => void }) {
+  const { settings } = useStoreContent();
+  const storeEmail = settingString(settings, "store_email");
+  const updatedAt = "14 July 2026";
+  const isPrivacy = kind === "privacy-policy";
+
+  return (
+    <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="bg-[#1A1A18] py-12 px-6 text-center">
+        <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Legal</p>
+        <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+          {isPrivacy ? "Privacy Policy" : "Terms of Service"}
+        </h1>
+        <p className="text-white/50 text-sm mt-3">Last updated: {updatedAt}</p>
+      </div>
+      <KenteStripe />
+
+      <article className="max-w-3xl mx-auto px-6 py-14 text-[#34332F]">
+        {isPrivacy ? (
+          <div className="space-y-9">
+            <section>
+              <p className="text-muted-foreground leading-relaxed">
+                Aunty Sala Fashion Gh respects your privacy. This policy explains the personal information we collect when you visit our website, create an account, contact us, or place an order, and how we use and protect it.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>1. Information we collect</h2>
+              <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+                <p><strong className="text-foreground">Account information:</strong> your name, email address, authentication details, and account identifiers.</p>
+                <p><strong className="text-foreground">Order and delivery information:</strong> products, measurements or customization details, delivery address, phone number, order history, and transaction references.</p>
+                <p><strong className="text-foreground">Messages and preferences:</strong> contact-form messages, newsletter choices, wishlist items, product reviews, and communications with our team.</p>
+                <p><strong className="text-foreground">Technical information:</strong> essential browser storage used for your session, cart, security, and site operation, together with basic device and request information processed by our hosting providers.</p>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>2. How we use your information</h2>
+              <ul className="list-disc pl-5 space-y-2 text-sm text-muted-foreground leading-relaxed">
+                <li>To create and secure your account.</li>
+                <li>To process, tailor, deliver, and support your orders.</li>
+                <li>To take payment, prevent fraud, and maintain transaction records.</li>
+                <li>To send service messages such as order confirmations and status updates.</li>
+                <li>To answer enquiries and, where you opt in, send marketing updates.</li>
+                <li>To operate, troubleshoot, protect, and improve the store and comply with legal obligations.</li>
+              </ul>
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">We process information as needed to perform our contract with you, comply with law, pursue legitimate business and security interests, or based on your consent where consent is required.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>Google Sign-In data</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">If you choose Google Sign-In, Google provides your basic profile information, including your name, email address, profile image, and account identifier. We use this information only to authenticate you, create or locate your customer account, display your profile, and connect you with your orders, saved addresses, and wishlist. We do not request access to Google Drive, contacts, calendar, or email content, and we do not sell Google user data.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>3. Service providers and sharing</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed mb-3">We do not sell your personal information. We share only what is needed with providers that help us run the store, including:</p>
+              <ul className="list-disc pl-5 space-y-2 text-sm text-muted-foreground leading-relaxed">
+                <li>Supabase for authentication, database, and application services.</li>
+                <li>Paystack and participating financial institutions for payment processing and verification. We do not receive or store your full card details.</li>
+                <li>Cloudinary for product and site media, and Cloudflare for hosting, delivery, and security.</li>
+                <li>Email and WhatsApp service providers for transactional messages and customer support.</li>
+                <li>Delivery partners, professional advisers, regulators, or law enforcement where necessary or legally required.</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>4. Retention and security</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">We retain personal information only for as long as it is reasonably needed to provide the service, maintain business and tax records, resolve disputes, prevent fraud, and meet legal obligations. We use reasonable administrative and technical safeguards, but no internet service can guarantee absolute security.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>5. International processing</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">Some providers may process information outside Ghana. Where this occurs, we take reasonable steps to use providers and safeguards appropriate to the information and applicable law.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>6. Your choices and rights</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">Subject to applicable law, including Ghana's Data Protection Act, 2012 (Act 843), you may ask to access, correct, update, object to certain processing of, or request deletion of your personal information. You may unsubscribe from marketing at any time. We may need to verify your identity and may retain information where the law permits or requires it.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>7. Children and policy changes</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">The store is not intended for children to make purchases without the involvement of a parent or guardian. We may update this policy as the store or legal requirements change. The latest version and effective date will appear on this page.</p>
+            </section>
+          </div>
+        ) : (
+          <div className="space-y-9">
+            <section>
+              <p className="text-muted-foreground leading-relaxed">These Terms of Service apply when you access the Aunty Sala Fashion Gh website, create an account, or purchase ready-to-wear or custom-made products. By using the store, you agree to these terms.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>1. Accounts and acceptable use</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">You must provide accurate information, keep your sign-in method secure, and promptly update information that changes. You may not misuse the website, attempt unauthorized access, interfere with its operation, submit unlawful content, or use it for fraudulent activity. You are responsible for activity carried out through your account.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>2. Products and custom orders</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">We aim to describe and display products accurately, but colours and textures can vary by screen, fabric batch, and handmade production. For made-to-measure work, you are responsible for providing accurate measurements and approving the agreed design details. Reasonable handmade variation is not a defect.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>3. Orders, prices, and payment</h2>
+              <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
+                <p>Submitting an order is an offer to purchase. An order is accepted when we confirm it and, where required, receive cleared payment. We may decline or cancel an order because of unavailable materials, an obvious pricing error, suspected fraud, delivery limitations, or another reasonable operational issue. If we cancel a paid order, we will arrange the applicable refund.</p>
+                <p>Prices are shown in the currency displayed at checkout. Delivery charges, duties, taxes, currency conversion, or bank fees may apply and will be shown or communicated where reasonably possible. Payments are processed by Paystack or another displayed payment provider under that provider's terms.</p>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>4. Production and delivery</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">Production and delivery dates are estimates unless we expressly agree otherwise in writing. Delays may occur because of material availability, customization, courier operations, customs, weather, or events outside our reasonable control. You are responsible for providing a complete, accurate delivery address and for any destination duties or import charges unless stated otherwise.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>5. Returns, alterations, and refunds</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">Our Returns Policy forms part of these terms. Made-to-measure, altered, or personalized items are normally not returnable unless faulty or materially different from the approved order. Contact us before returning anything so we can assess the issue and provide instructions.</p>
+              <button type="button" onClick={() => setPage("help-returns")} className="mt-3 text-sm font-bold text-[#C4562A] hover:text-[#A8411B]">Read the Returns Policy →</button>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>6. Intellectual property and third-party services</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">The website's branding, text, original images, designs, and other content belong to Aunty Sala Fashion Gh or their respective owners and may not be copied or commercially reused without permission. Links and services provided by third parties are governed by their own terms and policies.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>7. Liability</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">Nothing in these terms excludes rights or liability that cannot lawfully be excluded. To the extent permitted by law, we are not responsible for indirect or unforeseeable losses, third-party service failures, or loss caused by misuse of the website. Our responsibility for a product order will not exceed the amount paid for that order, except where applicable law requires otherwise.</p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>8. Governing law and changes</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">These terms are governed by the laws of Ghana. We encourage you to contact us first so we can try to resolve any concern. We may update these terms from time to time; the version published when you place an order will apply to that order unless a change is required by law.</p>
+            </section>
+          </div>
+        )}
+
+        <section className="mt-12 rounded-xl bg-[#F0EAE0] p-6">
+          <h2 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-display)" }}>Contact us</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-4">Questions about {isPrivacy ? "your personal information or this policy" : "these terms or an order"} can be sent to our team.</p>
+          {storeEmail && <a href={`mailto:${storeEmail}`} className="block text-sm font-semibold text-[#C4562A] hover:text-[#A8411B] mb-3">{storeEmail}</a>}
+          <button type="button" onClick={() => setPage("contact")} className="bg-[#1A1A18] hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold">Contact Us</button>
+        </section>
+      </article>
+    </div>
+  );
+}
+
 // ─── CONTACT PAGE ──────────────────────────────────────────────────────────
 function ContactPage() {
   const { settings, siteMedia } = useStoreContent();
@@ -2251,7 +2548,7 @@ function ContactPage() {
   };
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="bg-[#1A1A18] py-12 px-6 text-center relative overflow-hidden">
+      <div className="bg-[#1A1A18] min-h-[280px] md:min-h-[360px] px-6 text-center relative overflow-hidden flex items-center justify-center">
         <ManagedImage src={siteMedia.contact_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
         <div className="relative z-10">
           <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">We'd Love to Hear From You</p>
@@ -2394,22 +2691,173 @@ function AdminSidebar({ page, setPage, onExit }:
 }
 
 // ─── ADMIN DASHBOARD ───────────────────────────────────────────────────────
+type AdminDatePreset = "today" | "month" | "year" | "custom";
+
+type AdminDateRange = {
+  start: Date;
+  end: Date;
+  label: string;
+};
+
+const dateInputValue = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const dateFromInput = (value: string) => {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  return Number.isFinite(date.getTime()) ? date : new Date();
+};
+
+function adminDateRange(preset: AdminDatePreset, customStart: string, customEnd: string): AdminDateRange {
+  const now = new Date();
+  let start: Date;
+  let end: Date;
+  let label: string;
+  if (preset === "today") {
+    start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    label = "Today";
+  } else if (preset === "month") {
+    start = new Date(now.getFullYear(), now.getMonth(), 1);
+    end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    label = new Intl.DateTimeFormat("en-GH", { month: "long", year: "numeric" }).format(start);
+  } else if (preset === "year") {
+    start = new Date(now.getFullYear(), 0, 1);
+    end = new Date(now.getFullYear() + 1, 0, 1);
+    label = String(now.getFullYear());
+  } else {
+    start = dateFromInput(customStart);
+    const inclusiveEnd = dateFromInput(customEnd);
+    if (inclusiveEnd < start) inclusiveEnd.setTime(start.getTime());
+    end = new Date(inclusiveEnd);
+    end.setDate(end.getDate() + 1);
+    const formatter = new Intl.DateTimeFormat("en-GH", { day: "numeric", month: "short", year: "numeric" });
+    label = `${formatter.format(start)} – ${formatter.format(inclusiveEnd)}`;
+  }
+  return { start, end, label };
+}
+
+function useAdminDateRange() {
+  const [preset, setPreset] = useState<AdminDatePreset>("month");
+  const [customStart, setCustomStart] = useState(() => {
+    const now = new Date();
+    return dateInputValue(new Date(now.getFullYear(), now.getMonth(), 1));
+  });
+  const [customEnd, setCustomEnd] = useState(() => dateInputValue(new Date()));
+  const range = useMemo(() => adminDateRange(preset, customStart, customEnd), [preset, customStart, customEnd]);
+  return { preset, setPreset, customStart, setCustomStart, customEnd, setCustomEnd, range };
+}
+
+function AdminDateRangeFilter({ filter }: { filter: ReturnType<typeof useAdminDateRange> }) {
+  const options: Array<{ key: AdminDatePreset; label: string }> = [
+    { key: "today", label: "Today" },
+    { key: "month", label: "This Month" },
+    { key: "year", label: "This Year" },
+    { key: "custom", label: "Custom Range" },
+  ];
+  return (
+    <div className="flex flex-col items-start lg:items-end gap-3">
+      <div className="flex flex-wrap gap-2">
+        {options.map((option) => (
+          <button key={option.key} type="button" onClick={() => filter.setPreset(option.key)}
+            className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${filter.preset === option.key ? "bg-[#1A1A18] border-[#1A1A18] text-white" : "bg-card border-border hover:border-[#C4562A]"}`}>
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {filter.preset === "custom" && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <label className="flex items-center gap-2"><span className="text-muted-foreground">From</span><input type="date" value={filter.customStart} max={filter.customEnd} onChange={(event) => filter.setCustomStart(event.target.value)} className="border border-border rounded-lg bg-card px-3 py-2" /></label>
+          <label className="flex items-center gap-2"><span className="text-muted-foreground">To</span><input type="date" value={filter.customEnd} min={filter.customStart} max={dateInputValue(new Date())} onChange={(event) => filter.setCustomEnd(event.target.value)} className="border border-border rounded-lg bg-card px-3 py-2" /></label>
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">Showing {filter.range.label}</p>
+    </div>
+  );
+}
+
+const dateInAdminRange = (value: string | undefined, range: AdminDateRange) => {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time >= range.start.getTime() && time < range.end.getTime();
+};
+
+function paidOrdersInRange(orders: AdminOrder[], range: AdminDateRange) {
+  return orders.filter((order) => order.paymentStatus === "paid" && dateInAdminRange(order.paidAt ?? order.createdAt, range));
+}
+
+function revenueSeriesForRange(events: Array<{ amount: number; paidAt: string }>, range: AdminDateRange) {
+  const dayCount = Math.ceil((range.end.getTime() - range.start.getTime()) / 86_400_000);
+  const monthly = dayCount > 62;
+  const buckets = new Map<string, { month: string; revenue: number; orders: number }>();
+  const cursor = new Date(range.start);
+  while (cursor < range.end) {
+    const key = monthly
+      ? `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`
+      : dateInputValue(cursor);
+    const month = new Intl.DateTimeFormat("en-GH", monthly ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" }).format(cursor);
+    buckets.set(key, { month, revenue: 0, orders: 0 });
+    if (monthly) cursor.setMonth(cursor.getMonth() + 1, 1);
+    else cursor.setDate(cursor.getDate() + 1);
+  }
+  for (const event of events) {
+    const date = new Date(event.paidAt);
+    const key = monthly
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
+      : dateInputValue(date);
+    const bucket = buckets.get(key);
+    if (!bucket) continue;
+    bucket.revenue += event.amount;
+    bucket.orders += 1;
+  }
+  return [...buckets.values()];
+}
+
 function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
   const PRODUCTS = useProducts();
-  const { orders: ORDERS_DATA, salesData: SALES_DATA, categoryData: CATEGORY_DATA, tailoringItems } = useAdminData();
-  const revenue = ORDERS_DATA.reduce((sum, order) => sum + order.amount, 0);
+  const { orders: ORDERS_DATA, customPayments, tailoringItems } = useAdminData();
+  const dateFilter = useAdminDateRange();
+  const { periodOrders, paidOrders, paidCustomOrderCount, periodCustomOrders, salesData: SALES_DATA, revenue, categoryData: CATEGORY_DATA } = useMemo(() => {
+    const filteredOrders = ORDERS_DATA.filter((order) => dateInAdminRange(order.createdAt, dateFilter.range));
+    const filteredPaidOrders = paidOrdersInRange(ORDERS_DATA, dateFilter.range);
+    const filteredCustomPayments = customPayments.filter((payment) => dateInAdminRange(payment.paidAt, dateFilter.range));
+    const filteredCustomOrders = tailoringItems.filter((item) => dateInAdminRange(item.createdAt, dateFilter.range));
+    const paidRevenue = filteredPaidOrders.reduce((sum, order) => sum + order.amount, 0)
+      + filteredCustomPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const categoryMap = new Map<string, number>();
+    filteredPaidOrders.forEach((order) => order.salesBreakdown.forEach((item) => categoryMap.set(item.category, (categoryMap.get(item.category) ?? 0) + item.quantity)));
+    const revenueEvents = [
+      ...filteredPaidOrders.map((order) => ({ amount: order.amount, paidAt: order.paidAt ?? order.createdAt })),
+      ...filteredCustomPayments.map((payment) => ({ amount: payment.amount, paidAt: payment.paidAt })),
+    ];
+    return {
+      periodOrders: filteredOrders,
+      paidOrders: filteredPaidOrders,
+      paidCustomOrderCount: new Set(filteredCustomPayments.map((payment) => payment.customOrderId)).size,
+      periodCustomOrders: filteredCustomOrders,
+      salesData: revenueSeriesForRange(revenueEvents, dateFilter.range),
+      revenue: paidRevenue,
+      categoryData: [...categoryMap].map(([name, value]) => ({ name, value })).sort((left, right) => right.value - left.value),
+    };
+  }, [ORDERS_DATA, customPayments, tailoringItems, dateFilter.range]);
   const metrics = [
-    { label: "Total Revenue", value: ghs(revenue), delta: `${ORDERS_DATA.length} orders`, icon: DollarSign, up: true },
-    { label: "Orders", value: String(ORDERS_DATA.length), delta: "All recorded orders", icon: Package, up: true },
-    { label: "Custom Queue", value: String(tailoringItems.length), delta: "Active requests", icon: Scissors, up: false },
+    { label: "Paid Revenue", value: ghs(revenue), delta: `${paidOrders.length + paidCustomOrderCount} paid order${paidOrders.length + paidCustomOrderCount === 1 ? "" : "s"} including custom`, icon: DollarSign, up: true },
+    { label: "Orders Created", value: String(periodOrders.length), delta: dateFilter.range.label, icon: Package, up: true },
+    { label: "Custom Requests", value: String(periodCustomOrders.length), delta: dateFilter.range.label, icon: Scissors, up: false },
     { label: "Out of Stock", value: String(PRODUCTS.filter((product) => !product.inStock).length), delta: "Products", icon: AlertCircle, up: false },
   ];
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">Live data from Supabase</p>
+      <div className="mb-8 flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+        <div><h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Dashboard</h1>
+        <p className="text-muted-foreground text-sm mt-1">Live paid sales data from Supabase</p></div>
+        <AdminDateRangeFilter filter={dateFilter} />
       </div>
 
       {/* Metrics */}
@@ -2433,7 +2881,7 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
         <div className="xl:col-span-2 bg-card rounded-xl p-6 border border-border/50 shadow-sm">
           <div className="flex justify-between items-center mb-5">
             <h2 className="font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>Revenue Trend</h2>
-            <span className="text-xs text-muted-foreground">Last 6 months</span>
+            <span className="text-xs text-muted-foreground">{dateFilter.range.label}</span>
           </div>
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={SALES_DATA}>
@@ -2453,14 +2901,14 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
         </div>
         <div className="bg-card rounded-xl p-6 border border-border/50 shadow-sm">
           <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Sales by Category</h2>
-          <ResponsiveContainer width="100%" height={160}>
+          {CATEGORY_DATA.length > 0 ? <ResponsiveContainer width="100%" height={160}>
             <PieChart>
               <Pie data={CATEGORY_DATA} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
                 {CATEGORY_DATA.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v: number) => [v, "Products"]} />
+              <Tooltip formatter={(v: number) => [v, "Items sold"]} />
             </PieChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer> : <div className="h-40 flex items-center justify-center text-sm text-muted-foreground">No paid sales in this period.</div>}
           <div className="space-y-1.5 mt-2">
             {CATEGORY_DATA.map((d, i) => (
               <div key={d.name} className="flex items-center justify-between text-xs">
@@ -2790,12 +3238,46 @@ function AdminProducts() {
 function AdminOrders() {
   const { orders: ORDERS_DATA, refresh } = useAdminData();
   const [filter, setFilter] = useState("All");
+  const [datePreset, setDatePreset] = useState<"all" | "today" | "last-week" | "last-month" | "custom">("all");
+  const [customStart, setCustomStart] = useState(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 29);
+    return dateInputValue(date);
+  });
+  const [customEnd, setCustomEnd] = useState(() => dateInputValue(new Date()));
   const [selected, setSelected] = useState<(typeof ORDERS_DATA)[0] | null>(null);
   const [selectedStatus, setSelectedStatus] = useState("");
   const [statusSaving, setStatusSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const statuses = ["All","Draft (not paid)","Paid","Processing","Shipped","Delivered","Cancelled"];
-  const filtered = filter === "All" ? ORDERS_DATA : ORDERS_DATA.filter(o => o.status === filter);
+  const orderDateRange = useMemo<AdminDateRange | null>(() => {
+    if (datePreset === "all") return null;
+    const now = new Date();
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    if (datePreset === "today") {
+      return { start: new Date(now.getFullYear(), now.getMonth(), now.getDate()), end, label: "Today" };
+    }
+    if (datePreset === "last-week") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      return { start, end, label: "Last 7 days" };
+    }
+    if (datePreset === "last-month") {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+      return { start, end, label: "Last 30 days" };
+    }
+    const start = dateFromInput(customStart);
+    const inclusiveEnd = dateFromInput(customEnd);
+    if (inclusiveEnd < start) inclusiveEnd.setTime(start.getTime());
+    const customRangeEnd = new Date(inclusiveEnd);
+    customRangeEnd.setDate(customRangeEnd.getDate() + 1);
+    const formatter = new Intl.DateTimeFormat("en-GH", { day: "numeric", month: "short", year: "numeric" });
+    return { start, end: customRangeEnd, label: `${formatter.format(start)} – ${formatter.format(inclusiveEnd)}` };
+  }, [datePreset, customStart, customEnd]);
+  const filtered = useMemo(() => ORDERS_DATA.filter((order) => {
+    const statusMatches = filter === "All" || order.status === filter;
+    const dateMatches = !orderDateRange || dateInAdminRange(order.createdAt, orderDateRange);
+    return statusMatches && dateMatches;
+  }), [ORDERS_DATA, filter, orderDateRange]);
   const selectOrder = (order: (typeof ORDERS_DATA)[number]) => {
     setSelected(order);
     setSelectedStatus(order.status);
@@ -2818,7 +3300,7 @@ function AdminOrders() {
   };
   const exportOrders = () => downloadCsv("aunty-sala-orders.csv", [
     ["Order", "Customer", "Items", "Amount", "Status", "Date"],
-    ...ORDERS_DATA.map((order) => [order.id, order.customer, order.items, order.amount, order.status, order.date]),
+    ...filtered.map((order) => [order.id, order.customer, order.items, order.amount, order.status, order.date]),
   ]);
 
   return (
@@ -2826,7 +3308,7 @@ function AdminOrders() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Orders</h1>
-          <p className="text-muted-foreground text-sm mt-1">{ORDERS_DATA.length} total orders</p>
+          <p className="text-muted-foreground text-sm mt-1">{filtered.length} shown · {ORDERS_DATA.length} total orders</p>
         </div>
         <button onClick={exportOrders} className="border border-border px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center gap-2">
           <Download size={14}/> Export CSV
@@ -2840,6 +3322,35 @@ function AdminOrders() {
             {s}
           </button>
         ))}
+      </div>
+
+      <div className="mb-6 rounded-xl border border-border/60 bg-card p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-1">Order Date</p>
+          <p className="text-xs text-muted-foreground">{orderDateRange?.label ?? "All recorded dates"}</p>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex flex-wrap gap-2">
+            {[
+              ["all", "All Dates"],
+              ["today", "Today"],
+              ["last-week", "Last Week"],
+              ["last-month", "Last Month"],
+              ["custom", "Custom Range"],
+            ].map(([key, label]) => (
+              <button key={key} type="button" onClick={() => setDatePreset(key as typeof datePreset)}
+                className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${datePreset === key ? "bg-[#1A1A18] border-[#1A1A18] text-white" : "border-border hover:border-[#C4562A]"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {datePreset === "custom" && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <label className="flex items-center gap-2"><span className="text-muted-foreground">From</span><input type="date" value={customStart} max={customEnd} onChange={(event) => setCustomStart(event.target.value)} className="border border-border rounded-lg bg-card px-3 py-2" /></label>
+              <label className="flex items-center gap-2"><span className="text-muted-foreground">To</span><input type="date" value={customEnd} min={customStart} max={dateInputValue(new Date())} onChange={(event) => setCustomEnd(event.target.value)} className="border border-border rounded-lg bg-card px-3 py-2" /></label>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -2867,6 +3378,7 @@ function AdminOrders() {
                     <td className="px-5 py-3.5 text-muted-foreground text-xs">{o.date}</td>
                   </tr>
                 ))}
+                {filtered.length === 0 && <tr><td colSpan={5} className="px-5 py-12 text-center text-sm text-muted-foreground">No orders match the selected status and date filters.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -2875,23 +3387,65 @@ function AdminOrders() {
         {/* Order Detail */}
         <div className="lg:col-span-2">
           {selected ? (
-            <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6">
-              <div className="flex justify-between items-start mb-5">
+            <div className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
+              <div className="flex justify-between items-start gap-4 px-6 py-5 border-b border-border bg-gradient-to-br from-[#C4562A]/8 to-transparent">
                 <div>
-                  <p className="font-mono text-sm font-bold text-[#C4562A]">{selected.id}</p>
-                  <p className="text-muted-foreground text-xs">{selected.date}</p>
-                </div>
-                <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-[#1A1A18]"><X size={16}/></button>
-              </div>
-              <div className="space-y-3 text-sm mb-5">
-                {[["Customer", selected.customer],["Items", selected.items],["Fabric", selected.fabric],["Amount", ghs(selected.amount)]].map(([k,v]) => (
-                  <div key={k} className="flex justify-between gap-4">
-                    <span className="text-muted-foreground shrink-0">{k}</span>
-                    <span className="font-semibold text-right">{v}</span>
+                  <div className="flex flex-wrap items-center gap-2 mb-1">
+                    <p className="font-mono text-base font-bold text-[#C4562A]">{selected.id}</p>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor[selected.status]}`}>{selected.status}</span>
                   </div>
-                ))}
+                  <p className="text-muted-foreground text-xs flex items-center gap-1.5"><Calendar size={12}/>{selected.date}</p>
+                </div>
+                <button onClick={() => setSelected(null)} aria-label="Close order details" className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-[#1A1A18] hover:bg-black/5 transition-colors"><X size={17}/></button>
               </div>
-              <div className="mb-4">
+
+              <div className="p-6">
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                  <div className="rounded-xl bg-[#F0EAE0]/70 p-4 min-w-0">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Customer</p>
+                    <p className="font-semibold text-sm truncate" title={selected.customer}>{selected.customer}</p>
+                  </div>
+                  <div className="rounded-xl bg-[#C4562A]/8 p-4 text-right">
+                    <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Order Total</p>
+                    <p className="font-bold text-lg text-[#C4562A]">{ghs(selected.amount)}</p>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Order Items</h3>
+                    <span className="text-xs font-semibold text-[#C4562A]">{selected.itemDetails.reduce((sum, item) => sum + item.quantity, 0)} item{selected.itemDetails.reduce((sum, item) => sum + item.quantity, 0) === 1 ? "" : "s"}</span>
+                  </div>
+                  <div className="space-y-3">
+                    {selected.itemDetails.map((item, index) => (
+                      <article key={`${item.sku}-${index}`} className="rounded-xl border border-border/70 p-3 flex gap-3 bg-white/60">
+                        {item.imageUrl ? (
+                          <img src={item.imageUrl} alt={item.name} className="w-14 h-[68px] rounded-lg object-cover bg-[#E8E2D9] shrink-0" />
+                        ) : (
+                          <div className="w-14 h-[68px] rounded-lg bg-[#E8E2D9] flex items-center justify-center shrink-0"><ShoppingBag size={19} className="text-muted-foreground/50" /></div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-sm leading-snug">{item.name}</p>
+                              <p className="text-[10px] text-muted-foreground mt-0.5">{item.sku} · {item.fabric} · {item.category}</p>
+                            </div>
+                            <span className="shrink-0 rounded-full bg-[#1A1A18] text-white text-[10px] font-bold px-2 py-1">×{item.quantity}</span>
+                          </div>
+                          <div className="flex flex-wrap items-end justify-between gap-2 mt-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.size && <span className="rounded bg-[#F0EAE0] px-2 py-1 text-[10px] font-semibold">Size {item.size}</span>}
+                              {item.color && <span className="rounded bg-[#F0EAE0] px-2 py-1 text-[10px] font-semibold">{item.color}</span>}
+                            </div>
+                            <p className="text-xs font-bold text-[#C4562A]">{ghs(item.unitPrice * item.quantity)}</p>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-border pt-5 mb-4">
                 <label className="block text-xs font-semibold mb-2 uppercase tracking-wide text-muted-foreground">Update Status</label>
                 <select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]">
                   {statuses.filter((status) => status !== "All").map((status) => (
@@ -2901,12 +3455,13 @@ function AdminOrders() {
                   ))}
                 </select>
                 {selected.status === "Draft (not paid)" && <p className="text-xs text-muted-foreground mt-2">Paid is set automatically after Paystack verifies the payment.</p>}
+                </div>
+                <div className="flex gap-2">
+                  <button disabled={statusSaving || selectedStatus === selected.status} onClick={() => void handleStatusSave()} className="flex-1 bg-[#C4562A] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{statusSaving ? "Saving…" : "Save Status"}</button>
+                  <button onClick={() => window.print()} aria-label={`Print ${selected.id}`} className="p-2.5 border border-border rounded-lg hover:bg-muted transition-colors"><Printer size={15}/></button>
+                </div>
+                {statusMessage && <p role="status" className="mt-3 text-xs text-muted-foreground">{statusMessage}</p>}
               </div>
-              <div className="flex gap-2">
-                <button disabled={statusSaving || selectedStatus === selected.status} onClick={() => void handleStatusSave()} className="flex-1 bg-[#C4562A] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{statusSaving ? "Saving…" : "Save Status"}</button>
-                <button onClick={() => window.print()} aria-label={`Print ${selected.id}`} className="p-2.5 border border-border rounded-lg hover:bg-muted transition-colors"><Printer size={15}/></button>
-              </div>
-              {statusMessage && <p role="status" className="mt-3 text-xs text-muted-foreground">{statusMessage}</p>}
             </div>
           ) : (
             <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6 flex flex-col items-center justify-center h-48 text-center">
@@ -2924,14 +3479,35 @@ function AdminOrders() {
 function AdminCustomOrders() {
   const { tailoringItems, refresh } = useAdminData();
   const [items, setItems] = useState(tailoringItems);
+  const [selected, setSelected] = useState<(typeof tailoringItems)[number] | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dropColumn, setDropColumn] = useState<string | null>(null);
+  const draggedRef = useRef(false);
   const [statusMessage, setStatusMessage] = useState("");
-  useEffect(() => setItems(tailoringItems), [tailoringItems]);
+  const [quoteSaving, setQuoteSaving] = useState(false);
+  const [quoteForm, setQuoteForm] = useState({ price: "", dueDate: "", paymentPlan: "full" as "full" | "deposit", depositPercentage: "50" });
+  useEffect(() => {
+    setItems(tailoringItems);
+    setSelected((current) => current ? tailoringItems.find((item) => item.id === current.id) ?? null : null);
+  }, [tailoringItems]);
+  useEffect(() => {
+    if (!selected) return;
+    setQuoteForm({
+      price: selected.quotedPrice == null ? "" : String(selected.quotedPrice),
+      dueDate: selected.dueDateValue,
+      paymentPlan: selected.paymentPlan === "deposit" ? "deposit" : "full",
+      depositPercentage: String(selected.depositPercentage || 50),
+    });
+  }, [selected?.id, selected?.quotedPrice, selected?.dueDateValue, selected?.paymentPlan, selected?.depositPercentage]);
   const byCol = (col: string) => items.filter(i => i.col === col);
 
   const moveItem = async (id: string, toCol: string) => {
+    const currentItem = items.find((item) => item.id === id);
+    if (!currentItem || currentItem.col === toCol || savingId === id) return;
     const previousItems = items;
     setItems(prev => prev.map(i => i.id === id ? { ...i, col: toCol } : i));
+    setSelected((current) => current?.id === id ? { ...current, col: toCol } : current);
     setSavingId(id);
     setStatusMessage("");
     try {
@@ -2940,9 +3516,32 @@ function AdminCustomOrders() {
       setStatusMessage("Tailoring status updated.");
     } catch (error) {
       setItems(previousItems);
+      setSelected((current) => current?.id === id ? { ...current, col: currentItem.col } : current);
       setStatusMessage(error instanceof Error ? error.message : "The tailoring status could not be updated.");
     } finally {
       setSavingId(null);
+    }
+  };
+
+  const saveQuote = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selected) return;
+    setQuoteSaving(true);
+    setStatusMessage("");
+    try {
+      await setCustomOrderQuote({
+        customOrderId: selected.id,
+        quotedPrice: Number(quoteForm.price),
+        dueDate: quoteForm.dueDate,
+        paymentPlan: quoteForm.paymentPlan,
+        depositPercentage: Number(quoteForm.depositPercentage),
+      });
+      await refresh();
+      setStatusMessage(`Quote sent for ${selected.reference}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "The quote could not be saved.");
+    } finally {
+      setQuoteSaving(false);
     }
   };
 
@@ -2950,14 +3549,24 @@ function AdminCustomOrders() {
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
       <div className="mb-8">
         <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Tailoring Queue</h1>
-        <p className="text-muted-foreground text-sm mt-1">Track every custom order through the making process</p>
+        <p className="text-muted-foreground text-sm mt-1">Drag cards between stages, or click one to view the complete custom-order brief</p>
       </div>
       {statusMessage && <p role="status" className="mb-4 text-sm text-muted-foreground">{statusMessage}</p>}
 
       <div className="overflow-x-auto pb-4">
         <div className="flex gap-4 min-w-max">
           {KANBAN_COLS.map(col => (
-            <div key={col.key} className="w-56 bg-card rounded-xl border border-border/50 shadow-sm flex flex-col">
+            <div key={col.key}
+              onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; setDropColumn(col.key); }}
+              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropColumn((current) => current === col.key ? null : current); }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const id = event.dataTransfer.getData("text/plain") || draggedId;
+                setDropColumn(null);
+                setDraggedId(null);
+                if (id) void moveItem(id, col.key);
+              }}
+              className={`w-56 rounded-xl border shadow-sm flex flex-col transition-colors ${dropColumn === col.key ? "bg-[#C4562A]/5 border-[#C4562A]" : "bg-card border-border/50"}`}>
               <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${col.color.includes("blue") ? "bg-blue-500" : col.color.includes("yellow") ? "bg-yellow-500" : col.color.includes("orange") ? "bg-orange-500" : col.color.includes("purple") ? "bg-purple-500" : col.color.includes("pink") ? "bg-pink-500" : "bg-green-500"}`} />
@@ -2967,13 +3576,30 @@ function AdminCustomOrders() {
               </div>
               <div className="p-3 flex flex-col gap-2.5 flex-1">
                 {byCol(col.key).map(item => (
-                  <div key={item.id} className="bg-background border border-border/60 rounded-lg p-3 shadow-sm">
+                  <div key={item.id} draggable={savingId !== item.id}
+                    onDragStart={(event) => {
+                      draggedRef.current = true;
+                      setDraggedId(item.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", item.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedId(null);
+                      setDropColumn(null);
+                      window.setTimeout(() => { draggedRef.current = false; }, 0);
+                    }}
+                    onClick={() => { if (!draggedRef.current) setSelected(item); }}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(item); } }}
+                    role="button" tabIndex={0} aria-label={`View ${item.reference} details`}
+                    className={`bg-background border rounded-lg p-3 shadow-sm cursor-grab active:cursor-grabbing transition-all focus:outline-none focus:ring-2 focus:ring-[#C4562A]/40 ${draggedId === item.id ? "opacity-40 scale-[0.98]" : "border-border/60 hover:border-[#C4562A]/50 hover:shadow-md"}`}>
                     <p className="font-mono text-[10px] text-[#C4562A] font-bold mb-1">{item.reference}</p>
                     <p className="font-semibold text-xs leading-snug mb-1">{item.name}</p>
                     <p className="text-[11px] text-muted-foreground leading-snug mb-2">{item.item}</p>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar size={10}/> {item.due}</span>
-                      <select disabled={savingId === item.id} value={item.col} onChange={e => void moveItem(item.id, e.target.value)}
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-1"><Calendar size={10}/> {item.due || "No due date"}</span>
+                      <select disabled={savingId === item.id} value={item.col}
+                        onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}
+                        onChange={e => void moveItem(item.id, e.target.value)}
                         className="text-[10px] border border-border rounded px-1.5 py-0.5 focus:outline-none focus:border-[#C4562A] bg-card">
                         {KANBAN_COLS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                       </select>
@@ -2981,8 +3607,8 @@ function AdminCustomOrders() {
                   </div>
                 ))}
                 {byCol(col.key).length === 0 && (
-                  <div className="border-2 border-dashed border-border rounded-lg h-16 flex items-center justify-center">
-                    <span className="text-xs text-muted-foreground">Empty</span>
+                  <div className={`border-2 border-dashed rounded-lg h-20 flex items-center justify-center transition-colors ${dropColumn === col.key ? "border-[#C4562A] text-[#C4562A]" : "border-border text-muted-foreground"}`}>
+                    <span className="text-xs">{dropColumn === col.key ? "Drop here" : "Empty"}</span>
                   </div>
                 )}
               </div>
@@ -2990,6 +3616,85 @@ function AdminCustomOrders() {
           ))}
         </div>
       </div>
+
+      {selected && (
+        <div className="fixed inset-0 z-[100] bg-black/45 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center" onMouseDown={() => setSelected(null)}>
+          <section role="dialog" aria-modal="true" aria-labelledby="custom-order-detail-title" onMouseDown={(event) => event.stopPropagation()}
+            className="bg-[#FAF7F2] rounded-2xl shadow-2xl border border-white/30 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-[#1A1A18] text-white px-6 py-5 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <h2 id="custom-order-detail-title" className="font-mono text-lg font-bold text-[#D6B450]">{selected.reference}</h2>
+                  <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider">{KANBAN_COLS.find((column) => column.key === selected.col)?.label ?? selected.col}</span>
+                </div>
+                <p className="text-white/60 text-sm">Submitted {new Intl.DateTimeFormat("en-GH", { dateStyle: "medium" }).format(new Date(selected.createdAt))}</p>
+              </div>
+              <button type="button" onClick={() => setSelected(null)} aria-label="Close custom order details" className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"><X size={18}/></button>
+            </div>
+
+            <div className="p-6 md:p-8 space-y-7">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="rounded-xl border border-border bg-card p-4"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Customer</p><p className="font-bold">{selected.name}</p></div>
+                <a href={`mailto:${selected.email}`} className="rounded-xl border border-border bg-card p-4 hover:border-[#C4562A] transition-colors"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Email</p><p className="font-semibold text-sm break-all">{selected.email}</p></a>
+                <a href={`tel:${selected.phone.replace(/[^\d+]/g, "")}`} className="rounded-xl border border-border bg-card p-4 hover:border-[#C4562A] transition-colors"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Phone</p><p className="font-semibold text-sm">{selected.phone}</p></a>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Design brief</h3>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[["Style", selected.style], ["Fabric", selected.fabric], ["Occasion", selected.occasion || "Not specified"], ["Budget", selected.budget || "Not specified"], ["Quote", selected.quotedPrice == null ? "Not quoted" : ghs(selected.quotedPrice)], ["Due date", selected.due || "Not scheduled"]].map(([label, value]) => (
+                    <div key={label} className="rounded-xl bg-[#F0EAE0] p-4"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">{label}</p><p className="font-semibold text-sm">{value}</p></div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Measurements</h3>
+                  {selected.measurements.length > 0 ? <div className="grid grid-cols-2 gap-2">{selected.measurements.map((measurement) => <div key={measurement.label} className="rounded-lg border border-border bg-card p-3 flex justify-between gap-3 text-sm"><span className="text-muted-foreground">{measurement.label}</span><strong>{measurement.value}</strong></div>)}</div> : <p className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">No measurements were submitted.</p>}
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Customer notes</h3>
+                  <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground leading-relaxed min-h-24">{selected.notes || "No additional notes."}</p>
+                </div>
+              </div>
+
+              {selected.referenceMedia.length > 0 && <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Reference media</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{selected.referenceMedia.map((media, index) => <a key={`${media.url}-${index}`} href={media.url} target="_blank" rel="noreferrer" className="rounded-xl border border-border overflow-hidden bg-card hover:border-[#C4562A] transition-colors">
+                  {media.resourceType === "video" ? <video src={media.url} className="w-full aspect-square object-cover" /> : <img src={media.url} alt={`${selected.reference} reference ${index + 1}`} className="w-full aspect-square object-cover" />}
+                  <p className="p-2 text-[10px] text-muted-foreground truncate">{media.name}</p>
+                </a>)}</div>
+              </div>}
+
+              <form onSubmit={saveQuote} className="rounded-2xl border border-[#B8922A]/30 bg-[#B8922A]/5 p-5">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
+                  <div><h3 className="font-bold text-lg" style={{ fontFamily: "var(--font-display)" }}>Quote &amp; Payment</h3><p className="text-xs text-muted-foreground mt-1">Saving sends the customer an email and WhatsApp payment invitation.</p></div>
+                  <span className={`self-start rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${selected.paymentStatus === "paid" ? "bg-green-100 text-green-700" : selected.paymentStatus === "partially_paid" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"}`}>{selected.paymentStatus.replace(/_/g, " ")}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <label><span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Price ({selected.currency})</span><input required disabled={selected.amountPaid > 0} type="number" min="1" step="0.01" value={quoteForm.price} onChange={(event) => setQuoteForm((current) => ({ ...current, price: event.target.value }))} className="w-full border border-border rounded-lg bg-card px-3 py-2.5 text-sm disabled:opacity-60" /></label>
+                  <label><span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Due date</span><input type="date" value={quoteForm.dueDate} onChange={(event) => setQuoteForm((current) => ({ ...current, dueDate: event.target.value }))} className="w-full border border-border rounded-lg bg-card px-3 py-2.5 text-sm" /></label>
+                  <label><span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Payment plan</span><select disabled={selected.amountPaid > 0} value={quoteForm.paymentPlan} onChange={(event) => setQuoteForm((current) => ({ ...current, paymentPlan: event.target.value as "full" | "deposit" }))} className="w-full border border-border rounded-lg bg-card px-3 py-2.5 text-sm disabled:opacity-60"><option value="full">Full payment</option><option value="deposit">Deposit + balance</option></select></label>
+                  {quoteForm.paymentPlan === "deposit" && <label><span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Deposit %</span><input required disabled={selected.amountPaid > 0} type="number" min="1" max="99" value={quoteForm.depositPercentage} onChange={(event) => setQuoteForm((current) => ({ ...current, depositPercentage: event.target.value }))} className="w-full border border-border rounded-lg bg-card px-3 py-2.5 text-sm disabled:opacity-60" /></label>}
+                </div>
+                {selected.quotedPrice != null && <div className="grid grid-cols-3 gap-3 mt-4 text-sm"><div><span className="block text-[10px] uppercase text-muted-foreground">Quoted</span><strong>{ghs(selected.quotedPrice)}</strong></div><div><span className="block text-[10px] uppercase text-muted-foreground">Paid</span><strong className="text-green-700">{ghs(selected.amountPaid)}</strong></div><div><span className="block text-[10px] uppercase text-muted-foreground">Balance</span><strong className="text-[#C4562A]">{ghs(Math.max(0, selected.quotedPrice - selected.amountPaid))}</strong></div></div>}
+                <button disabled={quoteSaving || !quoteForm.price || selected.paymentStatus === "paid"} type="submit" className="mt-4 bg-[#C4562A] disabled:opacity-50 text-white rounded-lg px-5 py-2.5 text-sm font-bold hover:bg-[#A8411B]">{quoteSaving ? "Sending quote…" : selected.quoteStatus === "pending" ? "Save & Send Quote" : "Update & Resend Quote"}</button>
+              </form>
+
+              <div className="border-t border-border pt-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                <div className="w-full sm:max-w-xs">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Move to stage</label>
+                  <select disabled={savingId === selected.id} value={selected.col} onChange={(event) => void moveItem(selected.id, event.target.value)} className="w-full border border-border rounded-lg bg-card px-3 py-3 text-sm font-semibold focus:outline-none focus:border-[#C4562A]">
+                    {KANBAN_COLS.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}
+                  </select>
+                </div>
+                <button type="button" onClick={() => setSelected(null)} className="border border-border rounded-lg px-5 py-3 text-sm font-semibold hover:bg-muted">Close</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
@@ -3103,28 +3808,59 @@ function AdminCustomers() {
 
 // ─── ADMIN ANALYTICS ───────────────────────────────────────────────────────
 function AdminAnalytics() {
-  const { orders, tailoringItems, salesData: SALES_DATA } = useAdminData();
-  const fabricMap = new Map<string, { name: string; orders: number; revenue: number }>();
-  orders.forEach((order) => {
-    const name = order.fabric || "Other";
-    const current = fabricMap.get(name) ?? { name, orders: 0, revenue: 0 };
-    current.orders += 1; current.revenue += order.amount; fabricMap.set(name, current);
-  });
-  const fabricData = [...fabricMap.values()];
-  const averageOrderValue = orders.length ? Math.round(orders.reduce((sum, order) => sum + order.amount, 0) / orders.length) : 0;
+  const { orders, customPayments, tailoringItems } = useAdminData();
+  const dateFilter = useAdminDateRange();
+  const { paidOrders, paidCustomOrderCount, periodCustomOrders, salesData: SALES_DATA, totalRevenue, fabricData } = useMemo(() => {
+    const filteredPaidOrders = paidOrdersInRange(orders, dateFilter.range);
+    const filteredCustomPayments = customPayments.filter((payment) => dateInAdminRange(payment.paidAt, dateFilter.range));
+    const filteredCustomOrders = tailoringItems.filter((item) => dateInAdminRange(item.createdAt, dateFilter.range));
+    const revenue = filteredPaidOrders.reduce((sum, order) => sum + order.amount, 0)
+      + filteredCustomPayments.reduce((sum, payment) => sum + payment.amount, 0);
+    const fabricMap = new Map<string, { name: string; orderIds: Set<string>; revenue: number }>();
+    filteredPaidOrders.forEach((order) => order.salesBreakdown.forEach((item) => {
+      const name = item.fabric || "Other";
+      const current = fabricMap.get(name) ?? { name, orderIds: new Set<string>(), revenue: 0 };
+      current.orderIds.add(order.databaseId);
+      current.revenue += item.revenue;
+      fabricMap.set(name, current);
+    }));
+    filteredCustomPayments.forEach((payment) => {
+      const name = payment.fabric || "Custom Tailoring";
+      const current = fabricMap.get(name) ?? { name, orderIds: new Set<string>(), revenue: 0 };
+      current.orderIds.add(`custom-${payment.customOrderId}`);
+      current.revenue += payment.amount;
+      fabricMap.set(name, current);
+    });
+    const revenueEvents = [
+      ...filteredPaidOrders.map((order) => ({ amount: order.amount, paidAt: order.paidAt ?? order.createdAt })),
+      ...filteredCustomPayments.map((payment) => ({ amount: payment.amount, paidAt: payment.paidAt })),
+    ];
+    return {
+      paidOrders: filteredPaidOrders,
+      paidCustomOrderCount: new Set(filteredCustomPayments.map((payment) => payment.customOrderId)).size,
+      periodCustomOrders: filteredCustomOrders,
+      salesData: revenueSeriesForRange(revenueEvents, dateFilter.range),
+      totalRevenue: revenue,
+      fabricData: [...fabricMap.values()].map((item) => ({ name: item.name, orders: item.orderIds.size, revenue: item.revenue })).sort((left, right) => right.revenue - left.revenue),
+    };
+  }, [orders, customPayments, tailoringItems, dateFilter.range]);
+  const paidOrderCount = paidOrders.length + paidCustomOrderCount;
+  const averageOrderValue = paidOrderCount ? Math.round(totalRevenue / paidOrderCount) : 0;
 
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Analytics</h1>
-        <p className="text-muted-foreground text-sm mt-1">Sales performance and trends</p>
+      <div className="mb-8 flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+        <div><h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Analytics</h1>
+        <p className="text-muted-foreground text-sm mt-1">Verified paid sales performance and trends</p></div>
+        <AdminDateRangeFilter filter={dateFilter} />
       </div>
 
       {/* KPI Row */}
-      <div className="grid grid-cols-3 gap-5 mb-8">
-        {[{ label: "Avg Order Value", value: ghs(averageOrderValue) },
-          { label: "Total Orders", value: String(orders.length) },
-          { label: "Custom Orders", value: String(tailoringItems.length) }].map(m => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+        {[{ label: "Paid Revenue", value: ghs(totalRevenue) },
+          { label: "Avg Paid Order", value: ghs(averageOrderValue) },
+          { label: "Paid Orders", value: String(paidOrderCount) },
+          { label: "Custom Requests", value: String(periodCustomOrders.length) }].map(m => (
           <div key={m.label} className="bg-card rounded-xl p-5 border border-border/50 shadow-sm text-center">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{m.label}</p>
             <p className="text-3xl font-bold text-[#C4562A]">{m.value}</p>
@@ -3135,7 +3871,7 @@ function AdminAnalytics() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
         {/* Revenue chart */}
         <div className="bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Monthly Revenue & Orders</h2>
+          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Paid Revenue &amp; Orders</h2>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={SALES_DATA} barGap={6}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
@@ -3148,9 +3884,9 @@ function AdminAnalytics() {
           </ResponsiveContainer>
         </div>
 
-        {/* Weekly orders */}
+        {/* Paid orders */}
         <div className="bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Orders by Month</h2>
+          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Paid Orders Trend</h2>
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={SALES_DATA}>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
@@ -3180,12 +3916,12 @@ function AdminAnalytics() {
             <tbody>
               {fabricData.map((f, i) => {
                 const totalRev = fabricData.reduce((s,x) => s + x.revenue, 0);
-                const share = Math.round(f.revenue / totalRev * 100);
+                const share = totalRev > 0 ? Math.round(f.revenue / totalRev * 100) : 0;
                 return (
                   <tr key={f.name} className="border-b border-border/50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg" style={{ background: PIE_COLORS[i], opacity: 0.8 }} />
+                        <div className="w-8 h-8 rounded-lg" style={{ background: PIE_COLORS[i % PIE_COLORS.length], opacity: 0.8 }} />
                         <span className="font-semibold">{f.name}</span>
                       </div>
                     </td>
@@ -3203,6 +3939,7 @@ function AdminAnalytics() {
                   </tr>
                 );
               })}
+              {fabricData.length === 0 && <tr><td colSpan={5} className="px-6 py-10 text-center text-muted-foreground">No paid sales in this period.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -3518,6 +4255,8 @@ const PAGE_PATHS: Record<string, string> = {
   "help-fabric-care": "/help/fabric-care",
   "help-returns": "/help/returns",
   "help-faqs": "/help/faqs",
+  "privacy-policy": "/privacy-policy",
+  "terms-of-service": "/terms-of-service",
 };
 
 function routeFromPath(pathname: string) {
@@ -3776,6 +4515,7 @@ export default function App() {
           : <LoginPage />)}
       {page === "about" && <AboutPage />}
       {page.startsWith("help-") && <HelpPage section={page.replace("help-", "") as HelpSection} setPage={setPageNav} />}
+      {(page === "privacy-policy" || page === "terms-of-service") && <LegalPage kind={page} setPage={setPageNav} />}
       {!storeLoading && !storeError && page === "contact" && <ContactPage />}
 
       <CustomerFooter setPage={setPageNav} />

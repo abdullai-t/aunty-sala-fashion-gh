@@ -54,6 +54,15 @@ function emailContent(notification: Notification): string {
     case "admin_custom_order_submitted":
       content = `<p>A new custom order request was received.</p><p><strong>Reference:</strong> ${escapeHtml(payload.reference)}<br><strong>Customer:</strong> ${customerName} (${escapeHtml(payload.customerEmail)})<br><strong>Phone:</strong> ${escapeHtml(payload.phone)}<br><strong>Style:</strong> ${escapeHtml(payload.style)}<br><strong>Fabric:</strong> ${escapeHtml(payload.fabric)}</p>`;
       break;
+    case "custom_quote_ready":
+      content = `<p>Hello ${customerName},</p><p>Your quote for custom order <strong>${escapeHtml(payload.reference)}</strong> is ready.</p><p><strong>Quoted price:</strong> ${money(payload)}<br><strong>Payment plan:</strong> ${escapeHtml(payload.paymentPlan === "deposit" ? `${payload.depositPercentage}% deposit, then balance` : "Full payment")}</p><p>Sign in to your account, open the order, and select <strong>Pay with Paystack</strong> to continue.</p>`;
+      break;
+    case "custom_payment_received":
+      content = `<p>Hello ${customerName},</p><p>Your ${escapeHtml(payload.paymentKind)} payment for custom order <strong>${escapeHtml(payload.reference)}</strong> has been verified.</p><p><strong>Payment:</strong> ${money(payload)}<br><strong>Total paid:</strong> ${escapeHtml(payload.currency)} ${Number(payload.amountPaid ?? 0).toFixed(2)} of ${escapeHtml(payload.currency)} ${Number(payload.quotedPrice ?? 0).toFixed(2)}</p><p>We will keep you updated as your piece moves through production.</p>`;
+      break;
+    case "admin_custom_payment_received":
+      content = `<p>A verified custom-order payment was received.</p><p><strong>Reference:</strong> ${escapeHtml(payload.reference)}<br><strong>Customer:</strong> ${customerName} (${escapeHtml(payload.customerEmail)})<br><strong>Payment type:</strong> ${escapeHtml(payload.paymentKind)}<br><strong>Amount:</strong> ${money(payload)}<br><strong>Payment status:</strong> ${escapeHtml(payload.paymentStatus)}</p>`;
+      break;
     case "newsletter_subscribed":
       content = "<p>Thanks for joining the Aunty Sala Fashion Gh newsletter.</p><p>You will receive new collections, style stories, and selected offers from us.</p>";
       break;
