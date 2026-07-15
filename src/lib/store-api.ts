@@ -13,6 +13,7 @@ export interface StoreProduct {
   sizes: string[];
   colors: string[];
   images: string[];
+  mediaItems: Array<{ id: string; url: string; altText: string; sortOrder: number }>;
   description: string;
   inStock: boolean;
   isActive: boolean;
@@ -229,22 +230,92 @@ export async function subscribeToNewsletter(email: string): Promise<void> {
   void dispatchNotifications();
 }
 
+const PRODUCT_SELECT = "id,sku,slug,name,price,original_price,fabric,category:categories!products_category_id_fkey!inner(name),sizes,colors,description,in_stock,is_active,inventory_quantity,badge,media:product_media!product_media_product_id_fkey(id,sort_order,alt_text,asset:media_assets!product_media_media_id_fkey(secure_url))";
+
+export interface ProductPageInput {
+  offset: number;
+  limit: number;
+  category?: string;
+  fabric?: string;
+  search?: string;
+  sortBy?: "featured" | "price-asc" | "price-desc";
+}
+
 export async function getProducts(): Promise<StoreProduct[]> {
   if (!supabase) throw new Error("Supabase is not configured. Add the Vite Supabase variables to .env.local.");
 
   const { data, error } = await supabase
     .from("products")
-    .select("id,sku,slug,name,price,original_price,fabric,category:categories!products_category_id_fkey(name),sizes,colors,description,in_stock,is_active,inventory_quantity,badge,media:product_media!product_media_product_id_fkey(sort_order,asset:media_assets!product_media_media_id_fkey(secure_url))")
+    .select(PRODUCT_SELECT)
     .eq("is_active", true)
-    .order("id");
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(20);
 
   if (error) throw error;
 
   return (data ?? []).map((product) => mapProduct(product));
 }
 
+export async function getProductsPage(input: ProductPageInput): Promise<{ products: StoreProduct[]; total: number }> {
+  if (!supabase) throw new Error("Supabase is not configured. Add the Vite Supabase variables to .env.local.");
+  const offset = Math.max(0, Math.floor(input.offset));
+  const limit = Math.max(1, Math.min(50, Math.floor(input.limit)));
+  let query = supabase
+    .from("products")
+    .select(PRODUCT_SELECT, { count: "exact" })
+    .eq("is_active", true);
+
+  if (input.category && input.category !== "All") query = query.eq("category.name", input.category);
+  if (input.fabric && input.fabric !== "All") query = query.eq("fabric", input.fabric);
+  if (input.search?.trim()) query = query.ilike("name", `%${input.search.trim()}%`);
+
+  if (input.sortBy === "price-asc") query = query.order("price", { ascending: true }).order("id", { ascending: true });
+  else if (input.sortBy === "price-desc") query = query.order("price", { ascending: false }).order("id", { ascending: false });
+  else query = query.order("created_at", { ascending: false }).order("id", { ascending: false });
+
+  const { data, error, count } = await query.range(offset, offset + limit - 1);
+  if (error) throw error;
+  return { products: (data ?? []).map((product) => mapProduct(product)), total: count ?? 0 };
+}
+
+export async function getProductFilters(): Promise<{ categories: string[]; fabrics: string[] }> {
+  if (!supabase) throw new Error("Supabase is not configured. Add the Vite Supabase variables to .env.local.");
+  const { data, error } = await supabase
+    .from("products")
+    .select("fabric,category:categories!products_category_id_fkey(name)")
+    .eq("is_active", true);
+  if (error) throw error;
+  const categories = new Set<string>();
+  const fabrics = new Set<string>();
+  for (const product of data ?? []) {
+    const category = Array.isArray(product.category) ? product.category[0]?.name : product.category?.name;
+    if (category) categories.add(category);
+    if (product.fabric) fabrics.add(product.fabric);
+  }
+  return { categories: [...categories].sort(), fabrics: [...fabrics].sort() };
+}
+
+export async function getProductBySlug(slug: string): Promise<StoreProduct | null> {
+  if (!supabase) throw new Error("Supabase is not configured. Add the Vite Supabase variables to .env.local.");
+  const { data, error } = await supabase
+    .from("products")
+    .select(PRODUCT_SELECT)
+    .eq("is_active", true)
+    .eq("slug", slug)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? mapProduct(data) : null;
+}
+
 function mapProduct(product: any): StoreProduct {
   const media = [...(product.media ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+  const mediaItems = media.flatMap((item: any) => item.id && item.asset?.secure_url ? [{
+    id: item.id,
+    url: item.asset.secure_url,
+    altText: item.alt_text ?? product.name,
+    sortOrder: Number(item.sort_order),
+  }] : []);
   return {
     id: product.id,
     sku: product.sku,
@@ -256,7 +327,8 @@ function mapProduct(product: any): StoreProduct {
     category: Array.isArray(product.category) ? product.category[0]?.name ?? "Other" : product.category?.name ?? "Other",
     sizes: product.sizes ?? [],
     colors: product.colors ?? [],
-    images: media.flatMap((item: any) => item.asset?.secure_url ? [item.asset.secure_url] : []),
+    images: mediaItems.map((item) => item.url),
+    mediaItems,
     description: product.description,
     inStock: product.in_stock,
     isActive: product.is_active,
@@ -519,7 +591,7 @@ export async function getAdminData(): Promise<AdminData> {
     supabase.rpc("admin_directory"),
     supabase.from("custom_orders").select("id,reference_number,customer_name,email,phone,style,fabric,occasion,budget_range,quoted_price,bust_cm,waist_cm,hips_cm,height_cm,notes,status,due_date,created_at,currency,quote_status,payment_plan,deposit_percentage,payment_status,amount_paid,media:custom_order_media(sort_order,asset:media_assets(secure_url,resource_type,original_filename))").order("created_at", { ascending: false }),
     supabase.from("custom_order_payments").select("id,custom_order_id,amount,currency,payment_kind,paid_at,custom_order:custom_orders(reference_number,fabric)").eq("status", "paid").not("paid_at", "is", null).order("paid_at", { ascending: false }),
-    supabase.from("products").select("id,sku,slug,name,price,original_price,fabric,category:categories!products_category_id_fkey(name),sizes,colors,description,in_stock,is_active,inventory_quantity,badge,media:product_media!product_media_product_id_fkey(sort_order,asset:media_assets!product_media_media_id_fkey(secure_url))").order("created_at", { ascending: false }),
+    supabase.from("products").select(PRODUCT_SELECT).order("created_at", { ascending: false }),
     supabase.from("categories").select("id,name,slug").order("sort_order").order("name"),
     supabase.from("customer_measurements").select("user_id,bust_cm,waist_cm,hips_cm,height_cm"),
     supabase.from("store_settings").select("key,value"),
@@ -918,8 +990,21 @@ export async function updateProduct(input: {
   sizes: string[];
   colors: string[];
   media: CloudinaryAsset[];
+  retainedMediaIds: string[];
 }): Promise<void> {
   if (!supabase) throw new Error("Supabase is not configured yet.");
+  const { data: currentMedia, error: currentMediaError } = await supabase
+    .from("product_media")
+    .select("id")
+    .eq("product_id", input.id);
+  if (currentMediaError) throw currentMediaError;
+
+  const currentMediaIds = new Set((currentMedia ?? []).map((item) => item.id));
+  const retainedMediaIds = [...new Set(input.retainedMediaIds)].filter((id) => currentMediaIds.has(id));
+  if (retainedMediaIds.length + input.media.length < 1) {
+    throw new Error("Every product must have at least one image.");
+  }
+
   const categorySlug = slugify(input.category);
   const { data: category, error: categoryError } = await supabase
     .from("categories")
@@ -943,19 +1028,34 @@ export async function updateProduct(input: {
   }).eq("id", input.id);
   if (productError) throw productError;
 
+  const newMediaIds: string[] = [];
   if (input.media.length) {
-    const { count, error: countError } = await supabase.from("product_media").select("id", { count: "exact", head: true }).eq("product_id", input.id);
-    if (countError) throw countError;
-    for (const [index, asset] of input.media.entries()) {
+    for (const asset of input.media) {
       const mediaId = await saveCloudinaryAsset(asset);
-      const { error } = await supabase.from("product_media").upsert({
+      const { data: productMedia, error } = await supabase.from("product_media").upsert({
         product_id: input.id,
         media_id: mediaId,
         alt_text: input.name.trim(),
-        sort_order: (count ?? 0) + index,
-      }, { onConflict: "product_id,media_id" });
+        sort_order: retainedMediaIds.length + newMediaIds.length,
+      }, { onConflict: "product_id,media_id" }).select("id").single();
       if (error) throw error;
+      newMediaIds.push(productMedia.id);
     }
+  }
+
+  const orderedMediaIds = [...retainedMediaIds, ...newMediaIds];
+  for (const [sortOrder, mediaId] of orderedMediaIds.entries()) {
+    const { error } = await supabase.from("product_media").update({
+      sort_order: sortOrder,
+      alt_text: input.name.trim(),
+    }).eq("id", mediaId).eq("product_id", input.id);
+    if (error) throw error;
+  }
+
+  const removedMediaIds = [...currentMediaIds].filter((id) => !retainedMediaIds.includes(id));
+  if (removedMediaIds.length) {
+    const { error } = await supabase.from("product_media").delete().eq("product_id", input.id).in("id", removedMediaIds);
+    if (error) throw error;
   }
 }
 

@@ -1,7 +1,10 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   getProducts,
+  getProductsPage,
+  getProductFilters,
+  getProductBySlug,
   getStoreContent,
   getAccountData,
   getAdminData,
@@ -54,7 +57,7 @@ import {
   Download, Printer, LogOut, Bell, ChevronLeft, ChevronRight,
   Calendar, DollarSign, Send, CreditCard, ChevronDown, Truck,
   Award, User, Home, Tag, Filter, LayoutGrid, LayoutList, Zap,
-  CheckCircle, Circle
+  CheckCircle, Circle, Archive
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -246,6 +249,23 @@ const downloadCsv = (filename: string, rows: Array<Array<string | number>>) => {
 };
 function ManagedImage({ src, alt, className, onLoad }: { src?: string; alt: string; className: string; onLoad?: () => void }) {
   return src ? <img src={src} alt={alt} className={className} onLoad={onLoad} /> : null;
+}
+function FashionLoader({ label = "Tailoring your experience…", compact = false, className = "" }: { label?: string; compact?: boolean; className?: string }) {
+  return (
+    <div role="status" aria-live="polite" aria-label={label} className={`${compact ? "min-h-64" : "min-h-screen"} ${className} flex flex-col items-center justify-center gap-5 px-6 bg-background`}>
+      <div className="relative w-24 h-28 flex items-center justify-center text-[#C4562A]" aria-hidden="true">
+        <svg className="fashion-loader-dress w-[86px] h-[102px] overflow-visible" viewBox="0 0 86 102" fill="none">
+          <path d="M36 9C36 4 50 4 50 9L49 20L59 28L55 43C58 56 69 73 75 91C59 99 27 99 11 91C17 73 28 56 31 43L27 28L37 20ZM31 43C38 47 48 47 55 43" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" />
+          <circle cx="43" cy="23" r="3.5" className="fashion-loader-pin fill-[#B8922A]" />
+        </svg>
+      </div>
+      <div className="text-center">
+        <p className="font-semibold text-[#1A1A18]" style={{ fontFamily: "var(--font-display)" }}>{label}</p>
+        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#B8922A]">Aunty Sala Fashion Gh</p>
+      </div>
+      <span className="sr-only">Loading</span>
+    </div>
+  );
 }
 const statusColor: Record<string, string> = {
   Created: "bg-amber-50 text-amber-700",
@@ -494,8 +514,14 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
   const PRODUCTS = useProducts();
   const { testimonials, gallery, siteMedia, settings } = useStoreContent();
   const [heroLoaded, setHeroLoaded] = useState(false);
+  const testimonialScrollerRef = useRef<HTMLDivElement>(null);
   const featured = PRODUCTS.slice(0, 4);
   const instagram = getInstagramProfile(settings);
+  const scrollTestimonials = (direction: -1 | 1) => {
+    const scroller = testimonialScrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollBy({ left: direction * Math.max(320, scroller.clientWidth * 0.8) });
+  };
 
   return (
     <div className="min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
@@ -616,22 +642,34 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
 
       {/* Testimonials */}
       <section className="py-20 px-6 lg:px-10 max-w-7xl mx-auto">
-        <div className="text-center mb-12">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">What Our Clients Say</p>
-          <h2 className="text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Worn &amp; Loved</h2>
+        <div className="flex items-end justify-between gap-6 mb-12">
+          <div>
+            <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">What Our Clients Say</p>
+            <h2 className="text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Worn &amp; Loved</h2>
+          </div>
+          {testimonials.length > 1 && (
+            <div className="flex items-center gap-2" aria-label="Testimonial controls">
+              <button type="button" onClick={() => scrollTestimonials(-1)} aria-label="Previous testimonials" className="w-10 h-10 rounded-full border border-border bg-card flex items-center justify-center hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">
+                <ChevronLeft size={18} />
+              </button>
+              <button type="button" onClick={() => scrollTestimonials(1)} aria-label="Next testimonials" className="w-10 h-10 rounded-full border border-border bg-card flex items-center justify-center hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div ref={testimonialScrollerRef} tabIndex={0} aria-label="Customer testimonials" className="flex gap-6 overflow-x-auto snap-x snap-mandatory scroll-smooth motion-reduce:scroll-auto pb-4 overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {testimonials.map((t) => (
-            <div key={t.id} className="bg-card rounded-xl p-7 shadow-sm border border-border/50">
+            <article key={t.id} className="min-w-[85%] sm:min-w-[360px] lg:min-w-[calc(33.333%-1rem)] snap-start bg-card rounded-xl p-7 shadow-sm border border-border/50 flex flex-col">
               <StarRating rating={t.rating} />
               <p className="text-sm leading-relaxed text-[#1A1A18]/80 mt-4 mb-5 italic" style={{ fontFamily: "var(--font-display)" }}>
                 &ldquo;{t.text}&rdquo;
               </p>
-              <div>
+              <div className="mt-auto">
                 <p className="font-semibold text-sm">{t.name}</p>
                 <p className="text-xs text-muted-foreground">{t.location}</p>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       </section>
@@ -645,11 +683,17 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           </div>
           {instagram && <a href={instagram.href} target="_blank" rel="noreferrer" className="text-xs text-[#C4562A] font-semibold hover:underline">Follow us on Instagram</a>}
         </div>
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
           {gallery.map((item) => (
-            <div key={item.id} className="relative overflow-hidden rounded-lg bg-[#E8E2D9] group cursor-pointer" style={{ aspectRatio: "1" }}>
-              <img src={item.imageUrl} alt={item.altText} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+            <div key={item.id} className="relative overflow-hidden rounded-xl bg-[#E8E2D9] group shadow-sm" style={{ aspectRatio: "3 / 4" }}>
+              <img
+                src={item.imageUrl}
+                alt={item.altText}
+                loading="lazy"
+                decoding="async"
+                className="w-full h-full object-contain object-center transition-[filter] duration-500 group-hover:brightness-95"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                 <Instagram size={20} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
             </div>
@@ -684,7 +728,6 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
 
 // ─── SHOP PAGE ─────────────────────────────────────────────────────────────
 function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToCart: (p: Product) => void }) {
-  const PRODUCTS = useProducts();
   const { siteMedia } = useStoreContent();
   const { ids: wishlist, toggle: toggleWishlist, isAuthenticated } = useWishlist();
   const [category, setCategory] = useState("All");
@@ -694,6 +737,15 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
   const [search, setSearch] = useState("");
   const [wishlistPending, setWishlistPending] = useState<string[]>([]);
   const [wishlistError, setWishlistError] = useState("");
+  const [shopProducts, setShopProducts] = useState<Product[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [productsError, setProductsError] = useState("");
+  const [filterOptions, setFilterOptions] = useState<{ categories: string[]; fabrics: string[] }>({ categories: [], fabrics: [] });
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const requestVersionRef = useRef(0);
+  const loadingMoreRef = useRef(false);
 
   const handleWishlist = async (productId: string) => {
     if (!isAuthenticated) {
@@ -711,17 +763,84 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
     }
   };
 
-  const categories = ["All", ...new Set(PRODUCTS.map((product) => product.category))];
-  const fabrics = ["All", ...new Set(PRODUCTS.map((product) => product.fabric))];
+  const categories = ["All", ...filterOptions.categories];
+  const fabrics = ["All", ...filterOptions.fabrics];
+  const hasMore = shopProducts.length < totalProducts;
 
-  let filtered = PRODUCTS.filter(p => {
-    const catMatch = category === "All" || p.category === category;
-    const fabMatch = fabric === "All" || p.fabric === fabric;
-    const searchMatch = !search || p.name.toLowerCase().includes(search.toLowerCase());
-    return catMatch && fabMatch && searchMatch;
-  });
-  if (sortBy === "price-asc") filtered = [...filtered].sort((a,b) => a.price - b.price);
-  if (sortBy === "price-desc") filtered = [...filtered].sort((a,b) => b.price - a.price);
+  useEffect(() => {
+    getProductFilters().then(setFilterOptions).catch(() => setFilterOptions({ categories: [], fabrics: [] }));
+  }, []);
+
+  useEffect(() => {
+    const requestVersion = ++requestVersionRef.current;
+    setProductsLoading(true);
+    setProductsError("");
+    setShopProducts([]);
+    setTotalProducts(0);
+    loadingMoreRef.current = false;
+    setLoadingMore(false);
+    const timer = window.setTimeout(() => {
+      getProductsPage({
+        offset: 0,
+        limit: 20,
+        category,
+        fabric,
+        search,
+        sortBy: sortBy as "featured" | "price-asc" | "price-desc",
+      }).then((result) => {
+        if (requestVersion !== requestVersionRef.current) return;
+        setShopProducts(result.products);
+        setTotalProducts(result.total);
+      }).catch((error) => {
+        if (requestVersion !== requestVersionRef.current) return;
+        setProductsError(error instanceof Error ? error.message : "Products could not be loaded.");
+      }).finally(() => {
+        if (requestVersion === requestVersionRef.current) setProductsLoading(false);
+      });
+    }, search.trim() ? 300 : 0);
+    return () => window.clearTimeout(timer);
+  }, [category, fabric, search, sortBy]);
+
+  const loadMoreProducts = useCallback(async () => {
+    if (loadingMoreRef.current || productsLoading || shopProducts.length >= totalProducts) return;
+    const requestVersion = requestVersionRef.current;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    setProductsError("");
+    try {
+      const result = await getProductsPage({
+        offset: shopProducts.length,
+        limit: 10,
+        category,
+        fabric,
+        search,
+        sortBy: sortBy as "featured" | "price-asc" | "price-desc",
+      });
+      if (requestVersion !== requestVersionRef.current) return;
+      setShopProducts((current) => {
+        const existing = new Set(current.map((product) => product.id));
+        return [...current, ...result.products.filter((product) => !existing.has(product.id))];
+      });
+      setTotalProducts(result.total);
+    } catch (error) {
+      if (requestVersion === requestVersionRef.current) setProductsError(error instanceof Error ? error.message : "More products could not be loaded.");
+    } finally {
+      if (requestVersion === requestVersionRef.current) {
+        loadingMoreRef.current = false;
+        setLoadingMore(false);
+      }
+    }
+  }, [category, fabric, productsLoading, search, shopProducts.length, sortBy, totalProducts]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMore || productsLoading) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) void loadMoreProducts();
+    }, { rootMargin: "500px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [hasMore, loadMoreProducts, productsLoading]);
 
   return (
     <div className="min-h-screen pt-16" style={{ fontFamily: "var(--font-body)" }}>
@@ -771,13 +890,16 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground mb-6">{filtered.length} piece{filtered.length !== 1 ? "s" : ""} found</p>
+        <p className="text-sm text-muted-foreground mb-6">{productsLoading ? "Finding pieces…" : `${totalProducts} piece${totalProducts !== 1 ? "s" : ""} found`}</p>
         {wishlistError && <p role="alert" className="mb-5 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{wishlistError}</p>}
+        {productsError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600"><span>{productsError}</span>{shopProducts.length > 0 && <button type="button" onClick={() => void loadMoreProducts()} className="font-bold underline">Try again</button>}</div>}
 
-        {view === "grid" ? (
+        {productsLoading && <FashionLoader compact label="Curating the collection…" />}
+
+        {!productsLoading && view === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filtered.map(p => (
-              <div key={p.id} className="group bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-border/40">
+            {shopProducts.map(p => (
+              <div key={p.id} className="group bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-border/40 [content-visibility:auto] [contain-intrinsic-size:480px]">
                 <div className="relative overflow-hidden bg-[#E8E2D9] cursor-pointer" style={{ aspectRatio: "3/4" }}
                   onClick={() => setPage(`product-${p.slug}`)}>
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -806,10 +928,10 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
               </div>
             ))}
           </div>
-        ) : (
+        ) : !productsLoading ? (
           <div className="flex flex-col gap-4">
-            {filtered.map(p => (
-              <div key={p.id} className="bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 flex gap-5 p-4 cursor-pointer hover:shadow-md transition-shadow"
+            {shopProducts.map(p => (
+              <div key={p.id} className="bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 flex gap-5 p-4 cursor-pointer hover:shadow-md transition-shadow [content-visibility:auto] [contain-intrinsic-size:144px]"
                 onClick={() => setPage(`product-${p.slug}`)}>
                 <div className="w-24 h-28 rounded-lg overflow-hidden bg-[#E8E2D9] shrink-0">
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
@@ -836,13 +958,25 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
               </div>
             ))}
           </div>
-        )}
+        ) : null}
 
-        {filtered.length === 0 && (
+        {!productsLoading && shopProducts.length === 0 && !productsError && (
           <div className="text-center py-20 text-muted-foreground">
             <Package size={40} className="mx-auto mb-4 opacity-30" />
             <p className="text-lg font-semibold">No pieces match your filters</p>
             <button onClick={() => { setCategory("All"); setFabric("All"); setSearch(""); }} className="mt-3 text-[#C4562A] text-sm font-semibold hover:underline">Clear filters</button>
+          </div>
+        )}
+
+        {!productsLoading && shopProducts.length > 0 && (
+          <div ref={loadMoreRef} className="min-h-24 flex items-center justify-center" aria-live="polite">
+            {loadingMore ? (
+              <FashionLoader compact label="Tailoring more pieces…" />
+            ) : hasMore ? (
+              <button type="button" onClick={() => void loadMoreProducts()} className="border border-border rounded-lg px-5 py-2.5 text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">Load more pieces</button>
+            ) : (
+              <p className="text-xs text-muted-foreground">You’ve seen the full collection.</p>
+            )}
           </div>
         )}
       </div>
@@ -851,12 +985,16 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
 }
 
 // ─── PRODUCT DETAIL ────────────────────────────────────────────────────────
-function ProductDetailPage({ productSlug, setPage, addToCart }:
-  { productSlug: string; setPage: (p: string) => void; addToCart: (p: Product) => void }) {
+function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
+  { productSlug: string; setPage: (p: string) => void; addToCart: (p: Product) => void; onProductLoaded?: (product: Product) => void }) {
   const PRODUCTS = useProducts();
   const { testimonials } = useStoreContent();
   const { ids: wishlist, toggle: toggleWishlist, isAuthenticated } = useWishlist();
-  const product = PRODUCTS.find(p => p.slug === productSlug);
+  const localProduct = PRODUCTS.find(p => p.slug === productSlug);
+  const [remoteProduct, setRemoteProduct] = useState<Product | null>(null);
+  const [productLoading, setProductLoading] = useState(!localProduct);
+  const [productLoadError, setProductLoadError] = useState("");
+  const product = localProduct ?? remoteProduct;
   const [imgIdx, setImgIdx] = useState(0);
   const [size, setSize] = useState("");
   const [tab, setTab] = useState("description");
@@ -870,7 +1008,30 @@ function ProductDetailPage({ productSlug, setPage, addToCart }:
     ? testimonials.reduce((total, testimonial) => total + testimonial.rating, 0) / testimonials.length
     : null;
 
-  if (!product) return <div className="min-h-screen pt-24 text-center text-muted-foreground">Product not found.</div>;
+  useEffect(() => {
+    setImgIdx(0);
+    if (localProduct) {
+      setRemoteProduct(null);
+      setProductLoading(false);
+      setProductLoadError("");
+      return;
+    }
+    let active = true;
+    setProductLoading(true);
+    setProductLoadError("");
+    getProductBySlug(productSlug)
+      .then((result) => {
+        if (!active) return;
+        setRemoteProduct(result);
+        if (result) onProductLoaded?.(result);
+      })
+      .catch((error) => { if (active) setProductLoadError(error instanceof Error ? error.message : "The product could not be loaded."); })
+      .finally(() => { if (active) setProductLoading(false); });
+    return () => { active = false; };
+  }, [localProduct, onProductLoaded, productSlug]);
+
+  if (productLoading) return <FashionLoader className="pt-16" label="Preparing this piece…" />;
+  if (!product) return <div className="min-h-screen pt-24 text-center text-muted-foreground">{productLoadError || "Product not found."}</div>;
 
   const handleAdd = () => {
     addToCart(product);
@@ -1979,7 +2140,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
         {accountError && <p role="alert" className="mb-6 rounded-lg bg-red-50 text-red-600 p-4 text-sm">{accountError}</p>}
         {accountMessage && <p role="status" className="mb-6 rounded-lg bg-green-50 text-green-700 p-4 text-sm">{accountMessage}</p>}
         {customPaymentVerifying && <p role="status" className="mb-6 rounded-lg bg-amber-50 text-amber-800 p-4 text-sm">Verifying your custom-order payment…</p>}
-        {!accountData && !accountError && <p className="py-12 text-center text-sm text-muted-foreground">Loading account data…</p>}
+        {!accountData && !accountError && <FashionLoader compact label="Preparing your account…" />}
 
         {accountData && tab === "orders" && (
           <div className="space-y-4">
@@ -2650,16 +2811,18 @@ function ContactPage() {
 const ADMIN_LINKS = [
   { key: "dashboard", label: "Dashboard", icon: Home },
   { key: "products", label: "Products", icon: ShoppingBag },
+  { key: "archived-products", label: "Archived Products", icon: Archive },
   { key: "orders", label: "Orders", icon: Package },
   { key: "custom-orders", label: "Tailoring Queue", icon: Scissors },
   { key: "customers", label: "Customers", icon: Users },
   { key: "analytics", label: "Analytics", icon: BarChart2 },
   { key: "notifications", label: "Notifications", icon: Bell },
+  { key: "email-templates", label: "Email Templates", icon: Mail },
   { key: "settings", label: "Settings", icon: Settings },
 ];
 
-function AdminSidebar({ page, setPage, onExit }:
-  { page: string; setPage: (p: string) => void; onExit: () => void }) {
+function AdminSidebar({ page, setPage, onExit, onLogout }:
+  { page: string; setPage: (p: string) => void; onExit: () => void; onLogout: () => Promise<void> }) {
   return (
     <aside className="w-60 bg-[#1A1A18] text-[#FAF7F2] flex flex-col shrink-0 min-h-screen">
       <div className="px-5 py-4 border-b border-white/8 flex items-center gap-3">
@@ -2681,9 +2844,12 @@ function AdminSidebar({ page, setPage, onExit }:
           );
         })}
       </nav>
-      <div className="px-3 pb-5 border-t border-white/8 pt-4">
+      <div className="px-3 pb-5 border-t border-white/8 pt-4 space-y-1">
         <button onClick={onExit} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/50 hover:text-[#FAF7F2]/80 transition-colors">
-          <LogOut size={15} /> Back to Store
+          <Home size={15} /> Back to Store
+        </button>
+        <button onClick={() => void onLogout()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/70 hover:bg-red-500/10 hover:text-red-300 transition-colors">
+          <LogOut size={15} /> Log Out
         </button>
       </div>
     </aside>
@@ -2967,6 +3133,7 @@ function AdminProducts() {
   const [actionMessage, setActionMessage] = useState("");
   const [editingProduct, setEditingProduct] = useState<(typeof PRODUCTS)[number] | null>(null);
   const [productFiles, setProductFiles] = useState<File[]>([]);
+  const [retainedProductMedia, setRetainedProductMedia] = useState<Product["mediaItems"]>([]);
   const [availableCategories, setAvailableCategories] = useState(categories);
   const [showNewCategory, setShowNewCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -2988,11 +3155,16 @@ function AdminProducts() {
     setAvailableFabrics(fabrics);
     setProductForm((current) => current.fabric || fabrics.length === 0 ? current : { ...current, fabric: fabrics[0] });
   }, [PRODUCTS]);
-  const filtered = PRODUCTS.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.fabric.toLowerCase().includes(search.toLowerCase()));
+  const productFilePreviews = useMemo(() => productFiles.map((file) => ({ file, url: URL.createObjectURL(file) })), [productFiles]);
+  useEffect(() => () => productFilePreviews.forEach((preview) => URL.revokeObjectURL(preview.url)), [productFilePreviews]);
+  const activeProducts = PRODUCTS.filter((product) => product.isActive);
+  const filtered = activeProducts.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.fabric.toLowerCase().includes(search.toLowerCase()));
+  const productMediaCount = retainedProductMedia.length + productFiles.length;
   const setProductField = (field: keyof typeof productForm, value: string) => setProductForm((current) => ({ ...current, [field]: value }));
   const resetProductForm = () => {
     setEditingProduct(null);
     setProductFiles([]);
+    setRetainedProductMedia([]);
     setSaveError("");
     setProductForm({
       name: "", sku: "", price: "", category: availableCategories[0]?.name ?? "",
@@ -3006,6 +3178,7 @@ function AdminProducts() {
   const openEditProduct = (product: (typeof PRODUCTS)[number]) => {
     setEditingProduct(product);
     setProductFiles([]);
+    setRetainedProductMedia(product.mediaItems);
     setSaveError("");
     setProductForm({
       name: product.name, sku: product.sku, price: String(product.price), category: product.category,
@@ -3040,6 +3213,10 @@ function AdminProducts() {
   };
   const handleCreateProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (productMediaCount < 1) {
+      setSaveError("Every product must have at least one image.");
+      return;
+    }
     setSaving(true);
     setSaveError("");
     try {
@@ -3056,7 +3233,11 @@ function AdminProducts() {
         colors: productForm.colors.split(",").map((value) => value.trim()).filter(Boolean),
         media,
       };
-      if (editingProduct) await updateProduct({ id: editingProduct.id, ...productInput });
+      if (editingProduct) await updateProduct({
+        id: editingProduct.id,
+        ...productInput,
+        retainedMediaIds: retainedProductMedia.map((item) => item.id),
+      });
       else await createProduct(productInput);
       await refresh();
       resetProductForm();
@@ -3079,23 +3260,12 @@ function AdminProducts() {
       setActionMessage(error instanceof Error ? error.message : "The product could not be archived.");
     }
   };
-  const handleRestoreProduct = async (product: (typeof PRODUCTS)[number]) => {
-    setActionMessage("");
-    try {
-      await restoreProduct(product.id, product.inventoryQuantity);
-      await refresh();
-      setActionMessage(`${product.name} is live on the storefront again.`);
-    } catch (error) {
-      setActionMessage(error instanceof Error ? error.message : "The product could not be restored.");
-    }
-  };
-
   return (
     <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
       <div className="flex justify-between items-start mb-8">
         <div>
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Products</h1>
-          <p className="text-muted-foreground text-sm mt-1">{PRODUCTS.length} total products</p>
+          <p className="text-muted-foreground text-sm mt-1">{activeProducts.length} active product{activeProducts.length === 1 ? "" : "s"}</p>
         </div>
         <button onClick={openNewProduct} className="bg-[#C4562A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
           <Plus size={15}/> Add Product
@@ -3164,16 +3334,57 @@ function AdminProducts() {
             </div>
             <div className="col-span-2 md:col-span-3">
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Product media</label>
+              {productMediaCount > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-3 mb-3">
+                  {retainedProductMedia.map((item, index) => (
+                    <div key={item.id} className="relative aspect-[3/4] overflow-hidden rounded-xl border border-border bg-muted group">
+                      <img src={item.url} alt={item.altText || `${productForm.name} image ${index + 1}`} className="w-full h-full object-cover" />
+                      <span className="absolute bottom-2 left-2 rounded bg-black/65 px-2 py-1 text-[10px] font-semibold text-white">Current</span>
+                      <button
+                        type="button"
+                        disabled={productMediaCount <= 1}
+                        onClick={() => setRetainedProductMedia((current) => current.filter((media) => media.id !== item.id))}
+                        aria-label={`Remove current image ${index + 1}`}
+                        title={productMediaCount <= 1 ? "A product must keep at least one image" : "Remove image"}
+                        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-600 shadow-md transition-colors hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  ))}
+                  {productFilePreviews.map(({ file, url }, index) => (
+                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-[3/4] overflow-hidden rounded-xl border-2 border-[#C4562A]/35 bg-muted group">
+                      <img src={url} alt={`New upload preview ${index + 1}`} className="w-full h-full object-cover" />
+                      <span className="absolute bottom-2 left-2 rounded bg-[#C4562A] px-2 py-1 text-[10px] font-semibold text-white">New</span>
+                      <button
+                        type="button"
+                        disabled={productMediaCount <= 1}
+                        onClick={() => setProductFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}
+                        aria-label={`Remove new image ${index + 1}`}
+                        title={productMediaCount <= 1 ? "A product must keep at least one image" : "Remove image"}
+                        className="absolute right-2 top-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/95 text-red-600 shadow-md transition-colors hover:bg-red-600 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg px-4 py-6 text-sm text-muted-foreground cursor-pointer hover:border-[#C4562A]">
-                <input required={!editingProduct} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => setProductFiles(Array.from(event.target.files ?? []))} />
-                <Upload size={16} /> {productFiles.length ? `${productFiles.length} file(s) selected` : editingProduct ? "Add more Cloudinary images (optional)" : "Choose images for Cloudinary"}
+                <input required={productMediaCount === 0} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => {
+                  const selectedFiles = Array.from(event.target.files ?? []);
+                  setProductFiles((current) => [...current, ...selectedFiles]);
+                  event.currentTarget.value = "";
+                }} />
+                <Upload size={16} /> {productMediaCount ? "Add more images" : "Choose images for Cloudinary"}
               </label>
+              <p className="mt-2 text-xs text-muted-foreground">{productMediaCount} image{productMediaCount === 1 ? "" : "s"} in this product gallery. At least one image is required.</p>
             </div>
           </div>
           {saveError && <p role="alert" className="mt-4 text-sm text-red-600">{saveError}</p>}
           <div className="mt-4 flex gap-3">
             <button type="button" onClick={() => { resetProductForm(); setShowForm(false); }} className="border border-border px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
-            <button disabled={saving || (!editingProduct && productFiles.length === 0)} type="submit" className="bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{saving ? "Uploading & saving…" : editingProduct ? "Update Product" : "Save Product"}</button>
+            <button disabled={saving || productMediaCount === 0} type="submit" className="bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{saving ? "Uploading & saving…" : editingProduct ? "Update Product" : "Save Product"}</button>
           </div>
         </form>
       )}
@@ -3219,9 +3430,7 @@ function AdminProducts() {
                     <div className="flex items-center gap-2">
                       <button onClick={() => openEditProduct(p)} aria-label={`Edit ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#1A1A18]"><Edit size={14}/></button>
                       {p.isActive && <button onClick={() => window.open(`/product/${p.slug}`, "_blank", "noopener,noreferrer")} aria-label={`View ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#C4562A]"><Eye size={14}/></button>}
-                      {p.isActive
-                        ? <button onClick={() => void handleArchiveProduct(p)} aria-label={`Archive ${p.name}`} className="p-1.5 hover:bg-red-50 rounded transition-colors text-muted-foreground hover:text-red-600"><Trash2 size={14}/></button>
-                        : <button onClick={() => void handleRestoreProduct(p)} aria-label={`Restore ${p.name}`} className="px-2 py-1 text-xs font-semibold text-[#C4562A] hover:bg-[#C4562A]/10 rounded">Restore</button>}
+                      <button onClick={() => void handleArchiveProduct(p)} aria-label={`Archive ${p.name}`} className="p-1.5 hover:bg-red-50 rounded transition-colors text-muted-foreground hover:text-red-600"><Trash2 size={14}/></button>
                     </div>
                   </td>
                 </tr>
@@ -3230,6 +3439,100 @@ function AdminProducts() {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AdminArchivedProducts({ setPage }: { setPage: (page: string) => void }) {
+  const { products, refresh } = useAdminData();
+  const [search, setSearch] = useState("");
+  const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const archivedProducts = products
+    .filter((product) => !product.isActive)
+    .filter((product) => product.name.toLowerCase().includes(search.toLowerCase())
+      || product.sku.toLowerCase().includes(search.toLowerCase())
+      || product.fabric.toLowerCase().includes(search.toLowerCase()));
+
+  const handleRestore = async (product: Product) => {
+    setRestoringId(product.id);
+    setMessage("");
+    setError("");
+    try {
+      await restoreProduct(product.id, product.inventoryQuantity);
+      await refresh();
+      setMessage(`${product.name} was restored to the active products list.`);
+    } catch (restoreError) {
+      setError(restoreError instanceof Error ? restoreError.message : "The product could not be restored.");
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
+  return (
+    <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Archived Products</h1>
+          <p className="text-muted-foreground text-sm mt-1">{archivedProducts.length} archived product{archivedProducts.length === 1 ? "" : "s"}</p>
+        </div>
+        <button type="button" onClick={() => setPage("products")} className="border border-border bg-card px-4 py-2.5 rounded-lg text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">
+          Back to Products
+        </button>
+      </div>
+
+      {message && <p role="status" className="mb-4 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700">{message}</p>}
+      {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
+
+      <section className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-border">
+          <div className="relative max-w-sm">
+            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search archived products…" className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[#C4562A]" />
+          </div>
+        </div>
+
+        {archivedProducts.length === 0 ? (
+          <div className="px-6 py-16 text-center">
+            <Archive size={34} className="mx-auto mb-3 text-muted-foreground/40" />
+            <p className="font-semibold">{search ? "No archived products match your search." : "There are no archived products."}</p>
+            <p className="text-sm text-muted-foreground mt-1">Archived products will appear here and can be restored at any time.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  {["Product", "SKU", "Fabric", "Category", "Price", "Stock", "Action"].map((heading) => <th key={heading} className="text-left px-6 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">{heading}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {archivedProducts.map((product) => (
+                  <tr key={product.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3 min-w-[220px]">
+                        <img src={product.images[0]} alt="" className="w-12 h-14 rounded-lg object-cover bg-[#E8E2D9] grayscale-[20%]" />
+                        <div><p className="font-semibold">{product.name}</p><span className="inline-block mt-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">Archived</span></div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 font-mono text-xs text-muted-foreground">{product.sku}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{product.fabric}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{product.category}</td>
+                    <td className="px-6 py-4 font-bold text-[#C4562A]">{ghs(product.price)}</td>
+                    <td className="px-6 py-4 text-muted-foreground">{product.inventoryQuantity}</td>
+                    <td className="px-6 py-4">
+                      <button type="button" disabled={restoringId === product.id} onClick={() => void handleRestore(product)} className="rounded-lg bg-[#1A1A18] px-4 py-2 text-xs font-semibold text-white hover:bg-[#C4562A] disabled:opacity-50 transition-colors">
+                        {restoringId === product.id ? "Restoring…" : "Restore"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -3949,6 +4252,111 @@ function AdminAnalytics() {
 }
 
 // ─── ADMIN NOTIFICATIONS ──────────────────────────────────────────────────
+const EMAIL_TEMPLATE_PREVIEWS = [
+  {
+    id: "account-created", name: "Welcome email", audience: "Customer", subject: "Welcome to Aunty Sala Fashion Gh",
+    content: <><p>Hello Ama,</p><p>Your account has been created. You can now track orders, save addresses and measurements, and manage your wishlist.</p></>,
+  },
+  {
+    id: "order-paid", name: "Order confirmed", audience: "Customer", subject: "Order #ASF-1084 confirmed",
+    content: <><p>Hello Ama,</p><p>Payment for order <strong>#ASF-1084</strong> has been verified.</p><ul><li>Ama Sika Kente Blazer Dress × 1 — size M</li><li>Efe Indigo Batik Midi Dress × 1 — size L</li></ul><p><strong>Total:</strong> GHS 1,480.00</p><p>We will email you whenever its status changes.</p></>,
+  },
+  {
+    id: "order-status", name: "Order status update", audience: "Customer", subject: "Order #ASF-1084 is now Shipped",
+    content: <><p>Hello Ama,</p><p>Order <strong>#ASF-1084</strong> is now <strong>shipped</strong>.</p></>,
+  },
+  {
+    id: "custom-submitted", name: "Custom order received", audience: "Customer", subject: "Custom order request received",
+    content: <><p>Hello Ama,</p><p>We received your custom order request <strong>#CUSTOM-A82F14C0</strong> for an off-shoulder evening gown in Kente.</p><p>Our team will review it and contact you with the next steps.</p></>,
+  },
+  {
+    id: "custom-quote", name: "Custom quote ready", audience: "Customer", subject: "Quote ready for #CUSTOM-A82F14C0",
+    content: <><p>Hello Ama,</p><p>Your quote for custom order <strong>#CUSTOM-A82F14C0</strong> is ready.</p><p><strong>Quoted price:</strong> GHS 1,250.00<br/><strong>Payment plan:</strong> 50% deposit, then balance</p><p>Sign in to your account, open the order, and select <strong>Pay with Paystack</strong> to continue.</p></>,
+  },
+  {
+    id: "custom-payment", name: "Custom payment received", audience: "Customer", subject: "Payment received for #CUSTOM-A82F14C0",
+    content: <><p>Hello Ama,</p><p>Your deposit payment for custom order <strong>#CUSTOM-A82F14C0</strong> has been verified.</p><p><strong>Payment:</strong> GHS 625.00<br/><strong>Total paid:</strong> GHS 625.00 of GHS 1,250.00</p><p>We will keep you updated as your piece moves through production.</p></>,
+  },
+  {
+    id: "newsletter", name: "Newsletter welcome", audience: "Customer", subject: "Welcome to the Aunty Sala newsletter",
+    content: <><p>Thanks for joining the Aunty Sala Fashion Gh newsletter.</p><p>You will receive new collections, style stories, and selected offers from us.</p></>,
+  },
+  {
+    id: "admin-account", name: "New customer account", audience: "Admin", subject: "New customer account created",
+    content: <><p>A new customer account was created.</p><p><strong>Name:</strong> Ama Mensah<br/><strong>Email:</strong> ama@example.com</p></>,
+  },
+  {
+    id: "admin-order", name: "New paid order", audience: "Admin", subject: "New paid order #ASF-1084",
+    content: <><p>A new paid order is ready for processing.</p><p><strong>Order:</strong> #ASF-1084<br/><strong>Customer:</strong> Ama Mensah</p><ul><li>Ama Sika Kente Blazer Dress × 1 — size M</li><li>Efe Indigo Batik Midi Dress × 1 — size L</li></ul><p><strong>Total:</strong> GHS 1,480.00</p></>,
+  },
+  {
+    id: "admin-contact", name: "Contact form message", audience: "Admin", subject: "New contact form message",
+    content: <><p>A new contact form message was received.</p><p><strong>From:</strong> Ama Mensah (ama@example.com)<br/><strong>Subject:</strong> International delivery question</p><div style={{ whiteSpace: "pre-wrap" }}>Hello, please can you confirm delivery times to London for a made-to-measure dress?</div></>,
+  },
+  {
+    id: "admin-custom", name: "New custom order", audience: "Admin", subject: "New custom order request",
+    content: <><p>A new custom order request was received.</p><p><strong>Reference:</strong> #CUSTOM-A82F14C0<br/><strong>Customer:</strong> Ama Mensah (ama@example.com)<br/><strong>Phone:</strong> +233 24 000 0000<br/><strong>Style:</strong> Off-shoulder evening gown<br/><strong>Fabric:</strong> Kente</p></>,
+  },
+  {
+    id: "admin-custom-payment", name: "Custom-order payment", audience: "Admin", subject: "Custom order payment #CUSTOM-A82F14C0",
+    content: <><p>A verified custom-order payment was received.</p><p><strong>Reference:</strong> #CUSTOM-A82F14C0<br/><strong>Customer:</strong> Ama Mensah (ama@example.com)<br/><strong>Payment type:</strong> Deposit<br/><strong>Amount:</strong> GHS 625.00<br/><strong>Payment status:</strong> Partially paid</p></>,
+  },
+] as const;
+
+function AdminEmailTemplates() {
+  const [selectedId, setSelectedId] = useState(EMAIL_TEMPLATE_PREVIEWS[0].id);
+  const selected = EMAIL_TEMPLATE_PREVIEWS.find((template) => template.id === selectedId) ?? EMAIL_TEMPLATE_PREVIEWS[0];
+
+  return (
+    <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Email Templates</h1>
+        <p className="text-muted-foreground text-sm mt-1">Preview the customer and admin emails sent by the notification service.</p>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[300px_minmax(0,1fr)] gap-6 items-start">
+        <aside className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <p className="font-semibold text-sm">Templates</p>
+            <span className="text-xs text-muted-foreground">{EMAIL_TEMPLATE_PREVIEWS.length}</span>
+          </div>
+          <div className="p-2 max-h-[72vh] overflow-y-auto">
+            {EMAIL_TEMPLATE_PREVIEWS.map((template) => (
+              <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`w-full rounded-lg px-3 py-3 text-left transition-colors ${selected.id === template.id ? "bg-[#C4562A]/10 text-[#C4562A]" : "hover:bg-muted"}`}>
+                <span className="block text-sm font-semibold">{template.name}</span>
+                <span className={`inline-block mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${template.audience === "Customer" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>{template.audience}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="min-w-0">
+          <div className="bg-card rounded-xl border border-border/50 shadow-sm px-5 py-4 mb-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subject line</p><p className="font-semibold mt-1">{selected.subject}</p></div>
+              <span className={`rounded-full px-3 py-1 text-xs font-bold ${selected.audience === "Customer" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>{selected.audience} email</span>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border overflow-auto bg-[#faf7f2] p-4 sm:p-8">
+            <div style={{ maxWidth: 600, margin: "auto", padding: "32px 20px", color: "#1a1a18", fontFamily: "Arial, sans-serif" }}>
+              <div style={{ borderTop: "6px solid #b8922a", background: "#fff", padding: 32, borderRadius: 10 }}>
+                <div style={{ textAlign: "center", margin: "0 0 18px" }}>
+                  <img src="/aunty-sala-logo.png" width="92" alt="Aunty Sala Fashion Gh" style={{ display: "block", width: 92, maxWidth: "100%", height: "auto", margin: "0 auto", border: 0 }} />
+                </div>
+                <p style={{ margin: "0 0 8px", color: "#b8922a", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", textAlign: "center" }}>Aunty Sala Fashion Gh</p>
+                <h1 style={{ fontSize: 24, margin: "0 0 20px", fontFamily: "Arial, sans-serif" }}>{selected.subject}</h1>
+                <div style={{ fontSize: 15, lineHeight: 1.7, color: "#4a4742" }}>{selected.content}</div>
+              </div>
+              <p style={{ fontSize: 11, color: "#777", textAlign: "center", marginTop: 20 }}>Your inner diva, everything fashionable.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  );
+}
+
 function AdminNotifications() {
   const { notifications, refresh } = useAdminData();
   const [filter, setFilter] = useState("All");
@@ -4442,21 +4850,25 @@ export default function App() {
     }
   };
 
+  const mergeStoreProduct = useCallback((product: Product) => {
+    setProducts((current) => current.some((item) => item.id === product.id) ? current : [...current, product]);
+  }, []);
+
   // Extract product ID from page string
   const productSlug = page.startsWith("product-") ? page.replace("product-", "") : "";
   const seoProduct = productSlug ? products.find((product) => product.slug === productSlug) : undefined;
 
   if (isAdmin) {
-    if (authLoading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Checking your session…</div>;
+    if (authLoading) return <FashionLoader label="Checking your session…" />;
     if (!session) return <LoginPage />;
-    if (adminLoading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Loading admin data…</div>;
+    if (adminLoading) return <FashionLoader label="Preparing the admin portal…" />;
     if (adminError) return <div className="min-h-screen flex flex-col gap-4 items-center justify-center"><p className="text-red-600">{adminError}</p><button onClick={() => navigateTo("/")} className="text-[#C4562A] font-semibold">Back to store</button></div>;
     return (
       <ProductsContext.Provider value={products}>
       <AdminDataContext.Provider value={{ ...adminData, refresh: refreshAdminData }}>
       <div className="flex min-h-screen bg-background" style={{ fontFamily: "var(--font-body)" }}>
         <SeoHead page="admin" settings={storeContent.settings} isAdmin />
-        <AdminSidebar page={adminPage} setPage={setAdminPageNav} onExit={() => navigateTo("/")} />
+        <AdminSidebar page={adminPage} setPage={setAdminPageNav} onExit={() => navigateTo("/")} onLogout={handleSignOut} />
         <main className="flex-1 min-w-0 overflow-auto">
           {/* Admin Header */}
           <div className="sticky top-0 z-20 bg-background border-b border-border px-8 py-3 flex items-center justify-between">
@@ -4476,11 +4888,13 @@ export default function App() {
           </div>
           {adminPage === "dashboard" && <AdminDashboard setPage={setAdminPageNav} />}
           {adminPage === "products" && <AdminProducts />}
+          {adminPage === "archived-products" && <AdminArchivedProducts setPage={setAdminPageNav} />}
           {adminPage === "orders" && <AdminOrders />}
           {adminPage === "custom-orders" && <AdminCustomOrders />}
           {adminPage === "customers" && <AdminCustomers />}
           {adminPage === "analytics" && <AdminAnalytics />}
           {adminPage === "notifications" && <AdminNotifications />}
+          {adminPage === "email-templates" && <AdminEmailTemplates />}
           {adminPage === "settings" && <AdminSettings />}
         </main>
       </div>
@@ -4496,20 +4910,20 @@ export default function App() {
     <div className="bg-background min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
       <SeoHead page={page} product={seoProduct} settings={storeContent.settings} />
       <CustomerNav page={page} setPage={setPageNav} cartCount={cartItems.reduce((s,i) => s + i.qty, 0)} onAdminEnter={() => navigateTo("/admin")} isAuthenticated={Boolean(session)} />
-      {storeLoading && <div className="min-h-screen pt-24 flex items-center justify-center text-muted-foreground">Loading store…</div>}
+      {storeLoading && <FashionLoader className="pt-16" label="Curating the collection…" />}
       {storeError && <div className="min-h-screen pt-24 flex items-center justify-center text-red-600">{storeError}</div>}
       {!storeLoading && !storeError && page === "home" && <HomePage setPage={setPageNav} addToCart={addToCart} />}
       {!storeLoading && !storeError && page === "shop" && <ShopPage setPage={setPageNav} addToCart={addToCart} />}
-      {!storeLoading && !storeError && page.startsWith("product-") && <ProductDetailPage productSlug={productSlug} setPage={setPageNav} addToCart={addToCart} />}
+      {!storeLoading && !storeError && page.startsWith("product-") && <ProductDetailPage productSlug={productSlug} setPage={setPageNav} addToCart={addToCart} onProductLoaded={mergeStoreProduct} />}
       {page === "custom" && <CustomOrderPage />}
       {page === "cart" && <CartPage cartItems={cartItems} setCartItems={setCartItems} setPage={setPageNav} promoCode={promoCode} setPromoCode={setPromoCode} />}
       {page === "checkout" && (authLoading
-        ? <div className="min-h-screen pt-24 flex items-center justify-center text-sm text-muted-foreground">Checking your session…</div>
+        ? <FashionLoader className="pt-16" label="Preparing checkout…" />
         : session
           ? <CheckoutPage cartItems={cartItems} setPage={setPageNav} session={session} promoCode={promoCode} onOrderPlaced={() => { setCartItems([]); setPromoCode(""); }} />
           : <LoginPage redirectPath="/checkout" />)}
       {page === "account" && (authLoading
-        ? <div className="min-h-screen pt-24 flex items-center justify-center text-sm text-muted-foreground">Loading your account…</div>
+        ? <FashionLoader className="pt-16" label="Preparing your account…" />
         : session
           ? <AccountPage session={session} onSignOut={handleSignOut} />
           : <LoginPage />)}

@@ -25,6 +25,8 @@ const orderItems = (payload: Record<string, unknown>) => Array.isArray(payload.i
 function emailContent(notification: Notification): string {
   const payload = notification.payload;
   const customerName = escapeHtml(payload.customerName || "there");
+  const publicSiteUrl = (Deno.env.get("PUBLIC_SITE_URL") || "https://aunty-sala-fashion-gh.pages.dev").replace(/\/+$/, "");
+  const logoUrl = `${publicSiteUrl}/aunty-sala-logo.png`;
   let heading = notification.subject ?? "Aunty Sala Fashion Gh update";
   let content = "<p>We have an update for you.</p>";
 
@@ -68,7 +70,7 @@ function emailContent(notification: Notification): string {
       break;
   }
 
-  return `<!doctype html><html><body style="margin:0;background:#faf7f2;color:#1a1a18;font-family:Arial,sans-serif"><div style="max-width:600px;margin:auto;padding:32px 20px"><div style="border-top:6px solid #b8922a;background:#fff;padding:32px;border-radius:10px"><p style="margin:0 0 8px;color:#b8922a;font-size:12px;letter-spacing:2px;text-transform:uppercase">Aunty Sala Fashion Gh</p><h1 style="font-size:24px;margin:0 0 20px">${escapeHtml(heading)}</h1><div style="font-size:15px;line-height:1.7;color:#4a4742">${content}</div></div><p style="font-size:11px;color:#777;text-align:center;margin-top:20px">Your inner diva, everything fashionable.</p></div></body></html>`;
+  return `<!doctype html><html><body style="margin:0;background:#faf7f2;color:#1a1a18;font-family:Arial,sans-serif"><div style="max-width:600px;margin:auto;padding:32px 20px"><div style="border-top:6px solid #b8922a;background:#fff;padding:32px;border-radius:10px"><div style="text-align:center;margin:0 0 18px"><img src="${escapeHtml(logoUrl)}" width="92" alt="Aunty Sala Fashion Gh" style="display:block;width:92px;max-width:100%;height:auto;margin:0 auto;border:0"></div><p style="margin:0 0 8px;color:#b8922a;font-size:12px;letter-spacing:2px;text-transform:uppercase;text-align:center">Aunty Sala Fashion Gh</p><h1 style="font-size:24px;margin:0 0 20px">${escapeHtml(heading)}</h1><div style="font-size:15px;line-height:1.7;color:#4a4742">${content}</div></div><p style="font-size:11px;color:#777;text-align:center;margin-top:20px">Your inner diva, everything fashionable.</p></div></body></html>`;
 }
 
 async function sendEmail(notification: Notification): Promise<string> {

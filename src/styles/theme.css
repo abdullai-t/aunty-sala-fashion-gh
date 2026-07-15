@@ -179,3 +179,55 @@
     line-height: 1.5;
   }
 }
+
+.fashion-loader-dress path {
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  animation: fashion-dress-draw 2s ease-in-out infinite;
+}
+
+.fashion-loader-pin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: fashion-pin-pulse 2s ease-in-out infinite;
+}
+
+@keyframes fashion-dress-draw {
+  0% {
+    stroke-dashoffset: 260;
+    opacity: 0.4;
+  }
+  60%, 85% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: -260;
+    opacity: 0.35;
+  }
+}
+
+@keyframes fashion-pin-pulse {
+  0%, 35%, 100% {
+    transform: scale(0.55);
+    opacity: 0.35;
+  }
+  65% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fashion-loader-dress path {
+    animation: none;
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+
+  .fashion-loader-pin {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
