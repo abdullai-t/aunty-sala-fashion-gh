@@ -2861,7 +2861,7 @@ const ADMIN_LINKS = [
 function AdminSidebar({ page, setPage, onExit, onLogout }:
   { page: string; setPage: (p: string) => void; onExit: () => void; onLogout: () => Promise<void> }) {
   return (
-    <aside className="w-60 bg-[#1A1A18] text-[#FAF7F2] flex flex-col shrink-0 min-h-screen">
+    <aside className="fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-60 shrink-0 flex-col overflow-hidden bg-[#1A1A18] text-[#FAF7F2] shadow-[8px_0_30px_rgba(26,26,24,0.08)]">
       <div className="px-5 py-4 border-b border-white/8 flex items-center gap-3">
         <img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh logo" className="h-12 w-auto object-contain" />
         <div>
@@ -2869,11 +2869,11 @@ function AdminSidebar({ page, setPage, onExit, onLogout }:
           <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium">Admin Portal</p>
         </div>
       </div>
-      <nav className="flex-1 px-3 py-4 space-y-0.5">
+      <nav aria-label="Admin navigation" className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 py-4 overscroll-contain">
         {ADMIN_LINKS.map(({ key, label, icon: Icon }) => {
           const active = page === key;
           return (
-            <button key={key} onClick={() => setPage(key)}
+            <button key={key} type="button" onClick={() => setPage(key)}
               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? "bg-[#B8922A]/15 text-[#B8922A]" : "hover:bg-white/5 text-[#FAF7F2]/70 hover:text-[#FAF7F2]"}`}>
               <Icon size={16} className={active ? "text-[#B8922A]" : ""} />
               {label}
@@ -2882,10 +2882,10 @@ function AdminSidebar({ page, setPage, onExit, onLogout }:
         })}
       </nav>
       <div className="px-3 pb-5 border-t border-white/8 pt-4 space-y-1">
-        <button onClick={onExit} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/50 hover:text-[#FAF7F2]/80 transition-colors">
+        <button type="button" onClick={onExit} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/50 hover:text-[#FAF7F2]/80 transition-colors">
           <Home size={15} /> Back to Store
         </button>
-        <button onClick={() => void onLogout()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/70 hover:bg-red-500/10 hover:text-red-300 transition-colors">
+        <button type="button" onClick={() => void onLogout()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/70 hover:bg-red-500/10 hover:text-red-300 transition-colors">
           <LogOut size={15} /> Log Out
         </button>
       </div>
@@ -4445,9 +4445,17 @@ function AdminNotifications() {
 }
 
 // ─── ADMIN SETTINGS ────────────────────────────────────────────────────────
+type SettingsTab = "store" | "media" | "users";
+
+const SETTINGS_TABS = [
+  { key: "store", label: "Store details", description: "Identity, contact and notifications", icon: Settings },
+  { key: "media", label: "Media library", description: "Storefront imagery and gallery", icon: Upload },
+  { key: "users", label: "Team access", description: "Roles and admin permissions", icon: Users },
+] as const;
+
 function AdminSettings() {
   const { settings, users, media, refresh } = useAdminData();
-  const [tab, setTab] = useState("store");
+  const [tab, setTab] = useState<SettingsTab>("store");
   const storeFields = [
     ["store_name", "Store name"], ["store_email", "Store email"], ["store_phone", "Store phone"],
     ["store_address", "Store address"], ["store_hours", "Store hours"],
@@ -4472,7 +4480,6 @@ function AdminSettings() {
   const [mediaSaving, setMediaSaving] = useState(false);
   const [mediaMessage, setMediaMessage] = useState("");
   const [mediaInputKey, setMediaInputKey] = useState(0);
-  const tabs = [["store","Store Info"],["media","Media"],["users","User Roles"]];
   const mediaPlacements = [
     "home_hero", "home_custom_banner", "shop_banner", "custom_order_banner",
     "fabric_ankara", "fabric_kente", "fabric_batik", "fabric_mixed",
@@ -4560,120 +4567,158 @@ function AdminSettings() {
     }
   };
 
+  const activeUsers = users.filter((user) => user.active).length;
+
   return (
-    <div className="p-8" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Settings</h1>
-      </div>
-
-      <div className="flex gap-1 mb-7 border-b border-border">
-        {tabs.map(([k,label]) => (
-          <button key={k} onClick={() => setTab(k)}
-            className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors ${tab === k ? "border-[#C4562A] text-[#C4562A]" : "border-transparent text-muted-foreground hover:text-[#1A1A18]"}`}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "store" && (
-        <form onSubmit={handleStoreSave} className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <h2 className="font-bold text-base mb-5" style={{ fontFamily: "var(--font-display)" }}>Store Information</h2>
-          <div className="space-y-4">
-            {storeFields.map(([key, label]) => (
-              <div key={key}>
-                <label htmlFor={`setting-${key}`} className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                <input id={`setting-${key}`} type={key === "store_email" ? "email" : "text"} value={storeForm[key] ?? ""} onChange={(event) => setStoreForm((current) => ({ ...current, [key]: event.target.value }))} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+    <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:p-8" style={{ fontFamily: "var(--font-body)" }}>
+      <header className="relative mb-6 overflow-hidden rounded-3xl bg-[#1A1A18] px-6 py-7 text-white shadow-[0_18px_50px_rgba(26,26,24,0.16)] sm:px-8 sm:py-9">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#C4562A]/20 blur-2xl" />
+        <div className="pointer-events-none absolute bottom-0 right-1/3 h-28 w-28 rounded-full bg-[#B8922A]/10 blur-xl" />
+        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#D6B450]"><Settings size={12} /> Admin workspace</div>
+            <h1 className="text-3xl font-bold sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>Store settings</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/60">Manage the details, visual assets and team access that keep Aunty Sala Fashion Gh running smoothly.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            {[[storeFields.length, "Details"], [media.length, "Media"], [activeUsers, "Active team"]].map(([value, label]) => (
+              <div key={label} className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-3 backdrop-blur-sm sm:min-w-28 sm:px-4">
+                <p className="text-xl font-bold text-white">{value}</p>
+                <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-wide text-white/45">{label}</p>
               </div>
             ))}
           </div>
-          {storeMessage && <p role="status" className="mt-4 text-sm text-muted-foreground">{storeMessage}</p>}
-          <button disabled={storeSaving} type="submit" className="mt-5 bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{storeSaving ? "Saving…" : "Save Changes"}</button>
+        </div>
+      </header>
+
+      <div role="tablist" aria-label="Settings sections" className="mb-7 grid grid-cols-1 gap-2 rounded-2xl border border-border/60 bg-card p-2 shadow-sm sm:grid-cols-3">
+        {SETTINGS_TABS.map((item) => {
+          const TabIcon = item.icon;
+          const selected = tab === item.key;
+          return (
+            <button key={item.key} id={`settings-tab-${item.key}`} type="button" role="tab" aria-selected={selected} aria-controls={`settings-panel-${item.key}`} onClick={() => setTab(item.key)}
+              className={`group flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4562A]/40 ${selected ? "border-[#C4562A]/25 bg-[#C4562A] text-white shadow-[0_8px_20px_rgba(196,86,42,0.22)]" : "border-transparent text-[#1A1A18] hover:border-border hover:bg-[#F6F0E7]"}`}>
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${selected ? "bg-white/15 text-white" : "bg-[#C4562A]/8 text-[#C4562A] group-hover:bg-[#C4562A]/12"}`}><TabIcon size={18} /></span>
+              <span className="min-w-0"><span className="block text-sm font-bold">{item.label}</span><span className={`mt-0.5 block truncate text-[11px] ${selected ? "text-white/65" : "text-muted-foreground"}`}>{item.description}</span></span>
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "store" && (
+        <form id="settings-panel-store" role="tabpanel" aria-labelledby="settings-tab-store" onSubmit={handleStoreSave} className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-border/60 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <div><h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Store details</h2><p className="mt-1 text-xs text-muted-foreground">Keep customer-facing and operational information accurate.</p></div>
+            <span className="self-start rounded-full bg-[#7A8C6E]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#526346]">Live on storefront</span>
+          </div>
+          <div className="grid grid-cols-1 gap-4 bg-[#F8F4ED]/60 p-4 sm:p-6 md:grid-cols-2 xl:grid-cols-3">
+            {storeFields.map(([key, label]) => (
+              <label key={key} htmlFor={`setting-${key}`} className={`rounded-2xl border border-border/60 bg-card p-4 shadow-[0_5px_20px_rgba(26,26,24,0.035)] ${key === "store_address" ? "md:col-span-2" : ""}`}>
+                <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
+                <input id={`setting-${key}`} type={key.includes("email") ? "email" : key.includes("phone") || key.includes("whatsapp") ? "tel" : "text"} value={storeForm[key] ?? ""} onChange={(event) => setStoreForm((current) => ({ ...current, [key]: event.target.value }))}
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm transition-all focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" />
+              </label>
+            ))}
+          </div>
+          <div className="flex flex-col gap-4 border-t border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{storeMessage || "Changes appear on the storefront after saving."}</p>
+            <button disabled={storeSaving} type="submit" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-6 py-2.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(196,86,42,0.18)] transition-colors hover:bg-[#A8411B] disabled:cursor-not-allowed disabled:opacity-50">{storeSaving ? <><Clock size={15}/> Saving…</> : <><Check size={15}/> Save store details</>}</button>
+          </div>
         </form>
       )}
 
       {tab === "users" && (
-        <div className="max-w-lg bg-card rounded-xl p-6 border border-border/50 shadow-sm">
-          <div className="flex justify-between mb-5">
-            <h2 className="font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>Admin Users</h2>
-            <button onClick={() => setShowAddAdmin((current) => !current)} className="text-xs bg-[#C4562A] text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-1"><Plus size={12}/> Add admin</button>
+        <div id="settings-panel-users" role="tabpanel" aria-labelledby="settings-tab-users" className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-border/60 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+            <div><h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Team access</h2><p className="mt-1 text-xs text-muted-foreground">{activeUsers} active of {users.length} team member{users.length === 1 ? "" : "s"}</p></div>
+            <button type="button" aria-expanded={showAddAdmin} onClick={() => setShowAddAdmin((current) => !current)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#A8411B]"><Plus size={14}/> Add team member</button>
           </div>
+          <div className="bg-[#F8F4ED]/60 p-4 sm:p-6">
           {showAddAdmin && (
-            <form onSubmit={handleAddAdmin} className="mb-4 p-3 bg-muted/40 rounded-lg space-y-3">
-              <p className="text-xs text-muted-foreground">The person must already have a customer account with this email.</p>
-              <input required type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="person@example.com" className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
-              <div className="flex gap-2">
-                <select value={adminRole} onChange={(event) => setAdminRole(event.target.value as "staff" | "admin")} className="flex-1 border border-border rounded-lg px-3 py-2 text-sm bg-card"><option value="staff">Staff</option><option value="admin">Admin</option></select>
-                <button disabled={adminSaving} type="submit" className="bg-[#1A1A18] disabled:opacity-50 text-white px-4 rounded-lg text-xs font-semibold">{adminSaving ? "Adding…" : "Add access"}</button>
+            <form onSubmit={handleAddAdmin} className="mb-5 rounded-2xl border border-[#C4562A]/20 bg-[#C4562A]/5 p-4 sm:p-5">
+              <div className="mb-4"><h3 className="text-sm font-bold">Add a team member</h3><p className="mt-1 text-xs text-muted-foreground">They must already have a customer account using this email.</p></div>
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
+                <input aria-label="Team member email" required type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="person@example.com" className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" />
+                <select aria-label="Team member role" value={adminRole} onChange={(event) => setAdminRole(event.target.value as "staff" | "admin")} className="h-11 rounded-xl border border-border bg-card px-3 text-sm"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+                <button disabled={adminSaving} type="submit" className="h-11 rounded-xl bg-[#1A1A18] px-5 text-xs font-bold text-white disabled:opacity-50">{adminSaving ? "Adding…" : "Add access"}</button>
               </div>
             </form>
           )}
-          {adminMessage && <p role="status" className="mb-3 text-xs text-muted-foreground">{adminMessage}</p>}
-          <div className="space-y-3">
+          {adminMessage && <p role="status" aria-live="polite" className="mb-4 rounded-xl border border-border bg-card px-4 py-3 text-xs text-muted-foreground">{adminMessage}</p>}
+          <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
             {users.map(u => (
-              <div key={u.id} className={`p-3 border border-border rounded-lg ${u.active ? "" : "opacity-60"}`}>
+              <div key={u.id} className={`rounded-2xl border bg-card p-4 shadow-[0_5px_18px_rgba(26,26,24,0.035)] ${u.active ? "border-border/70" : "border-border/50 opacity-60"}`}>
                 <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[#C4562A]/10 rounded-full flex items-center justify-center text-xs font-bold text-[#C4562A]">{u.name.charAt(0)}</div>
-                  <div>
-                    <p className="font-semibold text-sm">{u.name}</p>
-                    <p className="text-xs text-muted-foreground">{u.email}</p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C4562A]/10 text-sm font-bold text-[#C4562A]">{u.name.charAt(0)}</div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">{u.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{u.email}</p>
                   </div>
                 </div>
-                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${u.active ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"}`}>{u.active ? "Active" : "Inactive"}</span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${u.active ? "bg-green-50 text-green-700" : "bg-muted text-muted-foreground"}`}>{u.active ? "Active" : "Inactive"}</span>
                 </div>
-                <div className="flex gap-2 mt-3">
-                  <select disabled={adminSaving} value={u.role.toLowerCase()} onChange={(event) => void handleAccessChange(u.id, event.target.value as "staff" | "admin", u.active)} className="flex-1 border border-border rounded-lg px-2 py-1.5 text-xs bg-card"><option value="staff">Staff</option><option value="admin">Admin</option></select>
-                  <button disabled={adminSaving} onClick={() => void handleAccessChange(u.id, u.role.toLowerCase() as "staff" | "admin", !u.active)} className="border border-border rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-muted">{u.active ? "Deactivate" : "Reactivate"}</button>
+                <div className="mt-4 flex gap-2 border-t border-border/60 pt-3">
+                  <select aria-label={`Role for ${u.name}`} disabled={adminSaving} value={u.role.toLowerCase()} onChange={(event) => void handleAccessChange(u.id, event.target.value as "staff" | "admin", u.active)} className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2 py-2 text-xs"><option value="staff">Staff</option><option value="admin">Admin</option></select>
+                  <button type="button" disabled={adminSaving} onClick={() => void handleAccessChange(u.id, u.role.toLowerCase() as "staff" | "admin", !u.active)} className="rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:bg-muted disabled:opacity-50">{u.active ? "Deactivate" : "Reactivate"}</button>
                 </div>
               </div>
             ))}
-            {users.length === 0 && <p className="text-sm text-muted-foreground">No admin memberships found.</p>}
+            {users.length === 0 ? <div className="col-span-full rounded-2xl border border-dashed border-border bg-card p-10 text-center"><Users size={26} className="mx-auto mb-2 text-muted-foreground/40"/><p className="text-sm text-muted-foreground">No admin memberships found.</p></div> : null}
+          </div>
           </div>
         </div>
       )}
 
       {tab === "media" && (
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(320px,420px)_1fr] gap-6">
-          <form onSubmit={handleMediaSave} className="bg-card rounded-xl p-6 border border-border/50 shadow-sm h-fit">
-            <h2 className="font-bold text-base mb-1" style={{ fontFamily: "var(--font-display)" }}>Upload or Replace Media</h2>
-            <p className="text-xs text-muted-foreground mb-5">Choosing an existing placement replaces its current storefront media. Gallery uploads create a new item.</p>
+        <div id="settings-panel-media" role="tabpanel" aria-labelledby="settings-tab-media" className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(340px,430px)_1fr]">
+          <form onSubmit={handleMediaSave} className="h-fit overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm xl:sticky xl:top-24">
+            <div className="border-b border-border/60 bg-[#1A1A18] px-6 py-5 text-white"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-[#D6B450]"><Upload size={18}/></span><div><h2 className="font-bold" style={{ fontFamily: "var(--font-display)" }}>Upload media</h2><p className="mt-0.5 text-[11px] text-white/50">Publish to Cloudinary and the storefront</p></div></div></div>
+            <div className="p-5 sm:p-6">
+            <p className="mb-5 rounded-xl border border-[#B8922A]/15 bg-[#B8922A]/5 p-3 text-xs leading-relaxed text-muted-foreground">Existing placements are replaced automatically. Gallery uploads create a new item.</p>
             <div className="space-y-4">
               <div>
-                <label htmlFor="media-placement" className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Placement</label>
-                <select id="media-placement" value={mediaPlacement} onChange={(event) => setMediaPlacement(event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card">
+                <label htmlFor="media-placement" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Storefront placement</label>
+                <select id="media-placement" value={mediaPlacement} onChange={(event) => setMediaPlacement(event.target.value)} className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm capitalize focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8">
                   {mediaPlacements.map((placement) => <option key={placement} value={placement}>{placement.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
-                <label htmlFor="media-alt" className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Alt text</label>
-                <input id="media-alt" required value={mediaAlt} onChange={(event) => setMediaAlt(event.target.value)} placeholder="Describe the image for accessibility" className="w-full border border-border rounded-lg px-4 py-3 text-sm" />
+                <label htmlFor="media-alt" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Accessible description</label>
+                <input id="media-alt" required value={mediaAlt} onChange={(event) => setMediaAlt(event.target.value)} placeholder="Describe what is shown in the image" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" />
+                <p className="mt-1.5 text-[10px] text-muted-foreground">Clear descriptions improve accessibility and search visibility.</p>
               </div>
-              <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg px-4 py-8 text-sm text-muted-foreground cursor-pointer hover:border-[#C4562A]">
+              <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-9 text-center transition-colors ${mediaFile ? "border-[#7A8C6E] bg-[#7A8C6E]/5" : "border-border bg-[#F8F4ED]/60 hover:border-[#C4562A] hover:bg-[#C4562A]/5"}`}>
                 <input key={mediaInputKey} required type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" className="sr-only" onChange={(event) => setMediaFile(event.target.files?.[0] ?? null)} />
-                <Upload size={16} /> {mediaFile?.name ?? "Choose an image or video"}
+                <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${mediaFile ? "bg-[#7A8C6E]/10 text-[#526346]" : "bg-card text-[#C4562A] shadow-sm"}`}><Upload size={19}/></span>
+                <span className="max-w-full truncate text-sm font-bold text-[#1A1A18]">{mediaFile?.name ?? "Choose an image or video"}</span>
+                <span className="mt-1 text-[10px] text-muted-foreground">JPEG, PNG, WebP, GIF, MP4 or WebM</span>
               </label>
             </div>
-            {mediaMessage && <p role="status" className="mt-4 text-sm text-muted-foreground">{mediaMessage}</p>}
-            <button disabled={mediaSaving || !mediaFile || !mediaAlt.trim()} type="submit" className="mt-5 w-full bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">
+            {mediaMessage && <p role="status" aria-live="polite" className="mt-4 rounded-xl border border-border bg-background px-4 py-3 text-xs text-muted-foreground">{mediaMessage}</p>}
+            <button disabled={mediaSaving || !mediaFile || !mediaAlt.trim()} type="submit" className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(196,86,42,0.18)] transition-colors hover:bg-[#A8411B] disabled:cursor-not-allowed disabled:opacity-50">
               {mediaSaving ? "Uploading…" : mediaPlacement === "gallery" ? "Add to Gallery" : "Upload & Replace"}
             </button>
+            </div>
           </form>
 
-          <section className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <div><h2 className="font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>Current Media</h2><p className="text-xs text-muted-foreground mt-0.5">{media.length} active item{media.length === 1 ? "" : "s"}</p></div>
+          <section className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+            <div className="flex items-center justify-between border-b border-border/60 px-5 py-5 sm:px-6">
+              <div><h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Current media</h2><p className="mt-0.5 text-xs text-muted-foreground">{media.length} active item{media.length === 1 ? "" : "s"} across the storefront</p></div>
+              <span className="rounded-full bg-[#C4562A]/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#C4562A]">Cloudinary</span>
             </div>
-            {media.length === 0 ? <div className="p-10 text-center text-sm text-muted-foreground"><Upload size={28} className="mx-auto mb-2 opacity-40"/>No site or gallery media has been added yet.</div> : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4 p-5">
-                {media.map((item) => <article key={`${item.kind}-${item.id}`} className="rounded-xl border border-border overflow-hidden bg-background">
-                  <div className="aspect-video bg-muted overflow-hidden">
-                    {item.resourceType === "video" ? <video src={item.url} controls className="w-full h-full object-cover" /> : <img src={item.url} alt={item.altText} className="w-full h-full object-cover" />}
+            {media.length === 0 ? <div className="p-14 text-center text-sm text-muted-foreground"><span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted"><Upload size={24} className="opacity-40"/></span><p className="font-semibold text-[#1A1A18]">Your media library is empty</p><p className="mt-1 text-xs">Upload the first storefront image using the form.</p></div> : (
+              <div className="grid grid-cols-1 gap-4 bg-[#F8F4ED]/60 p-4 sm:grid-cols-2 sm:p-5 2xl:grid-cols-3">
+                {media.map((item) => <article key={`${item.kind}-${item.id}`} className="group overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_5px_18px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(26,26,24,0.1)]">
+                  <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                    {item.resourceType === "video" ? <video src={item.url} controls className="h-full w-full object-cover" /> : <img src={item.url} alt={item.altText} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />}
+                    <span className="absolute left-3 top-3 rounded-full bg-[#1A1A18]/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">{item.kind}</span>
                   </div>
-                  <div className="p-3">
-                    <div className="flex items-start justify-between gap-2"><div className="min-w-0"><p className="font-semibold text-sm capitalize truncate">{item.placement.replace(/_/g, " ")}</p><p className="text-xs text-muted-foreground truncate">{item.altText || "No alt text"}</p></div><span className="text-[10px] uppercase font-bold text-[#B8922A]">{item.kind}</span></div>
-                    <div className="flex gap-2 mt-3">
-                      {item.kind === "site" && <button type="button" onClick={() => { setMediaPlacement(item.placement); setMediaAlt(item.altText); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex-1 border border-border rounded-lg py-1.5 text-xs font-semibold hover:bg-muted">Replace</button>}
-                      <button disabled={mediaSaving} type="button" onClick={() => void handleMediaRemove(item.kind, item.id, item.placement.replace(/_/g, " "))} className="p-2 border border-border rounded-lg text-muted-foreground hover:text-red-600 hover:bg-red-50" aria-label={`Remove ${item.placement.replace(/_/g, " ")}`}><Trash2 size={13}/></button>
+                  <div className="p-4">
+                    <div className="min-w-0"><p className="truncate text-sm font-bold capitalize">{item.placement.replace(/_/g, " ")}</p><p className="mt-1 truncate text-xs text-muted-foreground">{item.altText || "No alt text"}</p></div>
+                    <div className="mt-4 flex gap-2 border-t border-border/60 pt-3">
+                      {item.kind === "site" ? <button type="button" onClick={() => { setMediaPlacement(item.placement); setMediaAlt(item.altText); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex-1 rounded-lg border border-border py-2 text-xs font-semibold transition-colors hover:border-[#C4562A]/30 hover:bg-[#C4562A]/5 hover:text-[#C4562A]">Replace</button> : <span className="flex-1" />}
+                      <button disabled={mediaSaving} type="button" onClick={() => void handleMediaRemove(item.kind, item.id, item.placement.replace(/_/g, " "))} className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`Remove ${item.placement.replace(/_/g, " ")}`}><Trash2 size={14}/></button>
                     </div>
                   </div>
                 </article>)}
@@ -4936,10 +4981,10 @@ export default function App() {
     return (
       <ProductsContext.Provider value={products}>
       <AdminDataContext.Provider value={{ ...adminData, refresh: refreshAdminData }}>
-      <div className="flex min-h-screen bg-background" style={{ fontFamily: "var(--font-body)" }}>
+      <div className="h-screen h-dvh overflow-hidden bg-background" style={{ fontFamily: "var(--font-body)" }}>
         <SeoHead page="admin" settings={storeContent.settings} isAdmin />
         <AdminSidebar page={adminPage} setPage={setAdminPageNav} onExit={() => window.location.assign(STORE_ORIGIN)} onLogout={handleSignOut} />
-        <main className="flex-1 min-w-0 overflow-auto">
+        <main className="ml-60 h-screen h-dvh min-w-0 overflow-y-auto overscroll-contain">
           {/* Admin Header */}
           <div className="sticky top-0 z-20 bg-background border-b border-border px-8 py-3 flex items-center justify-between">
             <p className="text-sm font-semibold text-muted-foreground">
