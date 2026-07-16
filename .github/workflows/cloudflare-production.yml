@@ -78,6 +78,8 @@ jobs:
 
       - name: Build storefront and admin portal
         env:
+          VITE_STORE_ORIGIN: https://auntysalafashiongh.store
+          VITE_ADMIN_ORIGIN: https://admin.auntysalafashiongh.store
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_CLOUDINARY_CLOUD_NAME: ${{ secrets.VITE_CLOUDINARY_CLOUD_NAME }}

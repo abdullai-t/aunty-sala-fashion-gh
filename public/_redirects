@@ -1,1 +1,3 @@
+/admin https://admin.auntysalafashiongh.store/ 301
+/admin/* https://admin.auntysalafashiongh.store/:splat 301
 /* /index.html 200

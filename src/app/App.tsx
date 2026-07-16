@@ -1941,7 +1941,7 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
 }
 
 // ─── ACCOUNT PAGE ──────────────────────────────────────────────────────────
-function LoginPage({ redirectPath = "/account" }: { redirectPath?: string }) {
+function LoginPage({ redirectPath = "/account", context = "customer" }: { redirectPath?: string; context?: "customer" | "admin" }) {
   const [email, setEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
@@ -1998,8 +1998,10 @@ function LoginPage({ redirectPath = "/account" }: { redirectPath?: string }) {
           <div className="w-14 h-14 rounded-full bg-[#C4562A]/10 text-[#C4562A] flex items-center justify-center mx-auto mb-4">
             <User size={24} />
           </div>
-          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Welcome back</h1>
-          <p className="text-sm text-muted-foreground mt-2">Sign in to view your profile, orders, and saved details.</p>
+          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>{context === "admin" ? "Admin sign in" : "Welcome back"}</h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            {context === "admin" ? "Sign in with an authorized staff account to access the admin portal." : "Sign in to view your profile, orders, and saved details."}
+          </p>
         </div>
 
         <button onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
@@ -4702,19 +4704,38 @@ const PAGE_PATHS: Record<string, string> = {
   "terms-of-service": "/terms-of-service",
 };
 
-function routeFromPath(pathname: string) {
+const STORE_ORIGIN = (import.meta.env.VITE_STORE_ORIGIN || "https://auntysalafashiongh.store").replace(/\/$/, "");
+const ADMIN_ORIGIN = (import.meta.env.VITE_ADMIN_ORIGIN || "https://admin.auntysalafashiongh.store").replace(/\/$/, "");
+const ADMIN_HOSTNAME = new URL(ADMIN_ORIGIN).hostname;
+
+function isAdminHostname(hostname: string) {
+  return hostname === ADMIN_HOSTNAME || hostname === "admin.localhost";
+}
+
+function adminPageFromPath(path: string, adminHost: boolean) {
+  const requestedAdminPage = adminHost
+    ? path.split("/")[1] || "dashboard"
+    : path.split("/")[2] || "dashboard";
+  return ADMIN_LINKS.some((link) => link.key === requestedAdminPage)
+    ? requestedAdminPage
+    : "dashboard";
+}
+
+function routeFromPath(pathname: string, hostname = window.location.hostname) {
   const path = pathname.replace(/\/+$/, "") || "/";
+  const adminHost = isAdminHostname(hostname);
+
+  if (adminHost) {
+    return { page: "home", adminPage: adminPageFromPath(path, true), isAdmin: true };
+  }
+
   const productMatch = path.match(/^\/product\/([^/]+)$/);
   if (productMatch) {
     return { page: `product-${productMatch[1]}`, adminPage: "dashboard", isAdmin: false };
   }
 
   if (path === "/admin" || path.startsWith("/admin/")) {
-    const requestedAdminPage = path.split("/")[2] || "dashboard";
-    const adminPage = ADMIN_LINKS.some((link) => link.key === requestedAdminPage)
-      ? requestedAdminPage
-      : "dashboard";
-    return { page: "home", adminPage, isAdmin: true };
+    return { page: "home", adminPage: adminPageFromPath(path, false), isAdmin: true };
   }
 
   const page = Object.entries(PAGE_PATHS).find(([, routePath]) => routePath === path)?.[0]
@@ -4728,7 +4749,13 @@ function pathFromPage(page: string) {
 }
 
 export default function App() {
-  const initialRoute = routeFromPath(window.location.pathname);
+  const adminHost = isAdminHostname(window.location.hostname);
+  const localHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const legacyAdminPath = window.location.pathname === "/admin" || window.location.pathname.startsWith("/admin/");
+  const legacyAdminRedirect = !adminHost && !localHost && legacyAdminPath
+    ? `${ADMIN_ORIGIN}${window.location.pathname.replace(/^\/admin/, "") || "/"}${window.location.search}${window.location.hash}`
+    : "";
+  const initialRoute = routeFromPath(window.location.pathname, window.location.hostname);
   const [page, setPage] = useState(initialRoute.page);
   const [adminPage, setAdminPage] = useState(initialRoute.adminPage);
   const [isAdmin, setIsAdmin] = useState(initialRoute.isAdmin);
@@ -4752,6 +4779,10 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (legacyAdminRedirect) window.location.replace(legacyAdminRedirect);
+  }, [legacyAdminRedirect]);
 
   useEffect(() => {
     let active = true;
@@ -4833,7 +4864,7 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      const route = routeFromPath(window.location.pathname);
+      const route = routeFromPath(window.location.pathname, window.location.hostname);
       setPage(route.page);
       setAdminPage(route.adminPage);
       setIsAdmin(route.isAdmin);
@@ -4854,14 +4885,16 @@ export default function App() {
 
   const navigateTo = (path: string) => {
     if (window.location.pathname !== path) window.history.pushState({}, "", path);
-    const route = routeFromPath(path);
+    const route = routeFromPath(path, window.location.hostname);
     setPage(route.page);
     setAdminPage(route.adminPage);
     setIsAdmin(route.isAdmin);
   };
 
   const setPageNav = (nextPage: string) => navigateTo(pathFromPage(nextPage));
-  const setAdminPageNav = (nextPage: string) => navigateTo(nextPage === "dashboard" ? "/admin" : `/admin/${nextPage}`);
+  const setAdminPageNav = (nextPage: string) => navigateTo(adminHost
+    ? (nextPage === "dashboard" ? "/" : `/${nextPage}`)
+    : (nextPage === "dashboard" ? "/admin" : `/admin/${nextPage}`));
   const handleSignOut = async () => {
     await supabase?.auth.signOut();
     navigateTo("/");
@@ -4893,17 +4926,19 @@ export default function App() {
   const productSlug = page.startsWith("product-") ? page.replace("product-", "") : "";
   const seoProduct = productSlug ? products.find((product) => product.slug === productSlug) : undefined;
 
+  if (legacyAdminRedirect) return <FashionLoader label="Opening the admin portal…" />;
+
   if (isAdmin) {
     if (authLoading) return <FashionLoader label="Checking your session…" />;
-    if (!session) return <LoginPage />;
+    if (!session) return <LoginPage redirectPath="/" context="admin" />;
     if (adminLoading) return <FashionLoader label="Preparing the admin portal…" />;
-    if (adminError) return <div className="min-h-screen flex flex-col gap-4 items-center justify-center"><p className="text-red-600">{adminError}</p><button onClick={() => navigateTo("/")} className="text-[#C4562A] font-semibold">Back to store</button></div>;
+    if (adminError) return <div className="min-h-screen flex flex-col gap-4 items-center justify-center"><p className="text-red-600">{adminError}</p><button onClick={() => window.location.assign(STORE_ORIGIN)} className="text-[#C4562A] font-semibold">Back to store</button></div>;
     return (
       <ProductsContext.Provider value={products}>
       <AdminDataContext.Provider value={{ ...adminData, refresh: refreshAdminData }}>
       <div className="flex min-h-screen bg-background" style={{ fontFamily: "var(--font-body)" }}>
         <SeoHead page="admin" settings={storeContent.settings} isAdmin />
-        <AdminSidebar page={adminPage} setPage={setAdminPageNav} onExit={() => navigateTo("/")} onLogout={handleSignOut} />
+        <AdminSidebar page={adminPage} setPage={setAdminPageNav} onExit={() => window.location.assign(STORE_ORIGIN)} onLogout={handleSignOut} />
         <main className="flex-1 min-w-0 overflow-auto">
           {/* Admin Header */}
           <div className="sticky top-0 z-20 bg-background border-b border-border px-8 py-3 flex items-center justify-between">

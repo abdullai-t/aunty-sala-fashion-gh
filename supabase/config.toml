@@ -6,6 +6,7 @@ additional_redirect_urls = [
   "http://localhost:5173/**",
   "http://127.0.0.1:5173/**",
   "https://auntysalafashiongh.store/**",
+  "https://admin.auntysalafashiongh.store/**",
   "https://www.auntysalafashiongh.store/**",
   "https://aunty-sala-fashion-gh.pages.dev/**",
   "https://aunty-sala-fashion-gh-store.web.app/**"
