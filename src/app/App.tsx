@@ -36,7 +36,6 @@ import {
   addSavedAddress,
   updateSavedAddress,
   saveMeasurements,
-  subscribeToNewsletter,
   dispatchNotifications,
   type AccountData,
   type AdminData,
@@ -49,6 +48,7 @@ import {
 } from "../lib/store-api";
 import { uploadManyToCloudinary, type CloudinaryAsset } from "../lib/cloudinary";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { TurnstileWidget, verifyTurnstileToken } from "../lib/turnstile";
 import {
   ShoppingCart, Menu, X, Star, Heart, Search, Package, Users,
   BarChart2, Settings, ShoppingBag, Scissors, MessageCircle,
@@ -312,8 +312,8 @@ function StarRating({ rating }: { rating: number }) {
 }
 
 // ─── Customer Nav ──────────────────────────────────────────────────────────
-function CustomerNav({ page, setPage, cartCount, onAdminEnter, isAuthenticated }:
-  { page: string; setPage: (p: string) => void; cartCount: number; onAdminEnter: () => void; isAuthenticated: boolean }) {
+function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
+  { page: string; setPage: (p: string) => void; cartCount: number; isAuthenticated: boolean }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -382,8 +382,6 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter, isAuthenticated }
           <hr className="border-border my-1" />
           <button onClick={() => { setPage("account"); setOpen(false); }}
             className="text-left py-2 text-base font-medium hover:text-[#C4562A]">{isAuthenticated ? "My Account" : "Login"}</button>
-          <button onClick={onAdminEnter}
-            className="text-left py-2 text-xs text-muted-foreground hover:text-[#C4562A]">Admin Portal ↗</button>
         </div>
       )}
     </header>
@@ -393,19 +391,35 @@ function CustomerNav({ page, setPage, cartCount, onAdminEnter, isAuthenticated }
 // ─── Customer Footer ───────────────────────────────────────────────────────
 function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
   const { settings } = useStoreContent();
-  const [email, setEmail] = useState("");
-  const [subscribed, setSubscribed] = useState(false);
-  const [subscribing, setSubscribing] = useState(false);
-  const [subscribeError, setSubscribeError] = useState("");
   const instagram = getInstagramProfile(settings);
   const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
   const phone = settingString(settings, "store_phone");
   const storeEmail = settingString(settings, "store_email");
-  const contactLinks = [
-    instagram && { label: `Instagram ${instagram.label}`, href: instagram.href, icon: Instagram, external: true },
-    whatsappUrl && { label: "Chat with us on WhatsApp", href: whatsappUrl, icon: MessageCircle, external: true },
-    phone && { label: `Call ${phone}`, href: `tel:${phone.replace(/[^\d+]/g, "")}`, icon: Phone, external: false },
-    storeEmail && { label: `Email ${storeEmail}`, href: `mailto:${storeEmail}`, icon: Mail, external: false },
+  const socialLinks = [
+    instagram && {
+      label: `Instagram ${instagram.label}`,
+      href: instagram.href,
+      icon: Instagram,
+      external: true,
+    },
+    whatsappUrl && {
+      label: "Chat with us on WhatsApp",
+      href: whatsappUrl,
+      icon: MessageCircle,
+      external: true,
+    },
+    phone && {
+      label: `Call ${phone}`,
+      href: `tel:${phone.replace(/[^\d+]/g, "")}`,
+      icon: Phone,
+      external: false,
+    },
+    storeEmail && {
+      label: `Email ${storeEmail}`,
+      href: `mailto:${storeEmail}`,
+      icon: Mail,
+      external: false,
+    },
   ].filter(Boolean) as Array<{ label: string; href: string; icon: typeof Instagram; external: boolean }>;
   const shopLinks = [
     { label: "Shop All", page: "shop" },
@@ -421,20 +435,6 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
     { label: "Returns Policy", page: "help-returns" },
     { label: "FAQs", page: "help-faqs" },
   ];
-  const handleSubscribe = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubscribing(true);
-    setSubscribeError("");
-    try {
-      await subscribeToNewsletter(email);
-      setSubscribed(true);
-      setEmail("");
-    } catch (error) {
-      setSubscribeError(error instanceof Error ? error.message : "We couldn't subscribe you. Please try again.");
-    } finally {
-      setSubscribing(false);
-    }
-  };
   return (
     <footer className="bg-[#1A1A18] text-[#FAF7F2]">
       <KenteStripe />
@@ -450,15 +450,6 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
           <p className="text-sm text-[#FAF7F2]/60 leading-relaxed mt-3">
             Made-to-order dresses and ready-to-wear pieces blending contemporary silhouettes with the finest African print fabrics.
           </p>
-          <div className="flex gap-3 mt-5">
-            {contactLinks.map(({ label, href, icon: Icon, external }) => (
-              <a key={label} href={href} aria-label={label} title={label}
-                target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}
-                className="w-9 h-9 rounded-full border border-white/20 flex items-center justify-center hover:border-[#B8922A] hover:text-[#B8922A] transition-colors">
-                <Icon size={16} />
-              </a>
-            ))}
-          </div>
         </div>
 
         <div>
@@ -478,23 +469,18 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
         </div>
 
         <div>
-          <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Newsletter</p>
-          <p className="text-sm text-[#FAF7F2]/60 mb-4 leading-relaxed">New collections, style stories, and exclusive offers — straight to your inbox.</p>
-          {subscribed ? (
-            <div className="flex items-center gap-2 text-[#B8922A] text-sm">
-              <Check size={16} /> <span>You're subscribed!</span>
-            </div>
-          ) : (
-            <form onSubmit={handleSubscribe} className="flex flex-col gap-2">
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="your@email.com" required
-                className="bg-white/10 border border-white/20 rounded px-3 py-2.5 text-sm placeholder-white/30 focus:outline-none focus:border-[#B8922A] text-white" />
-              <button type="submit" disabled={subscribing} className="bg-[#C4562A] hover:bg-[#A8411B] disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded transition-colors">
-                {subscribing ? "Subscribing…" : "Subscribe"}
-              </button>
-              {subscribeError && <p role="alert" className="text-xs text-red-300">{subscribeError}</p>}
-            </form>
-          )}
+          <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Follow Us</p>
+          <p className="text-sm text-[#FAF7F2]/60 mb-4 leading-relaxed">Follow our latest pieces and speak directly with the Aunty Sala team.</p>
+          <div className="flex flex-wrap items-center gap-3">
+            {socialLinks.map(({ label, href, icon: Icon, external }) => (
+              <a key={label} href={href} aria-label={label} title={label}
+                target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-[#FAF7F2] hover:border-[#B8922A] hover:bg-[#B8922A] hover:text-[#1A1A18] transition-colors">
+                <Icon size={17} />
+              </a>
+            ))}
+            {socialLinks.length === 0 && <p className="text-sm text-[#FAF7F2]/50">Social links will appear here once added in store settings.</p>}
+          </div>
         </div>
       </div>
       <div className="border-t border-white/10 max-w-7xl mx-auto px-6 lg:px-10 py-5 flex flex-col lg:flex-row justify-between items-center gap-3 text-xs text-[#FAF7F2]/40">
@@ -532,7 +518,7 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           className={`absolute inset-0 w-full h-full object-cover object-top transition-opacity duration-700 ${heroLoaded ? "opacity-90" : "opacity-0"}`} />
         <div className="absolute inset-0 bg-gradient-to-r from-[#1A0E08]/80 via-[#1A0E08]/40 to-transparent" />
         <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-10 pb-20 w-full">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-4 font-semibold">New Collection — Summer 2026</p>
+          <p className="text-[#B8922A] text-xs tracking-[0.22em] uppercase mb-4 font-semibold">Aunty Sala Fashion Gh — Official Online Fashion Store</p>
           <h1 className="text-white text-5xl md:text-6xl lg:text-7xl font-bold leading-none mb-6 max-w-4xl" style={{ fontFamily: "var(--font-display)" }}>
             Your Inner Diva,<br /><em className="not-italic text-[#C4562A]">Everything Fashionable.</em>
           </h1>
@@ -1243,6 +1229,8 @@ function CustomOrderPage() {
   const [submitError, setSubmitError] = useState("");
   const [submissionReference, setSubmissionReference] = useState("");
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
+  const [customOrderTurnstileToken, setCustomOrderTurnstileToken] = useState("");
+  const [customOrderTurnstileReset, setCustomOrderTurnstileReset] = useState(0);
   const [form, setForm] = useState({
     style: "", fabric: "", occasion: "", budget: "", name: "", email: "", phone: "",
     bust: "", waist: "", hips: "", height: "", notes: "",
@@ -1254,9 +1242,14 @@ function CustomOrderPage() {
   const up = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async () => {
+    if (!customOrderTurnstileToken) {
+      setSubmitError("Complete the security verification before submitting your order.");
+      return;
+    }
     setSubmitting(true);
     setSubmitError("");
     try {
+      await verifyTurnstileToken(customOrderTurnstileToken);
       const media = referenceFiles.length
         ? await uploadManyToCloudinary(referenceFiles, "aunty-sala-fashion-gh/custom-orders")
         : [];
@@ -1267,6 +1260,8 @@ function CustomOrderPage() {
       setSubmitError(error instanceof Error ? error.message : "We couldn't submit your request. Please try again.");
     } finally {
       setSubmitting(false);
+      setCustomOrderTurnstileToken("");
+      setCustomOrderTurnstileReset((value) => value + 1);
     }
   };
 
@@ -1457,9 +1452,16 @@ function CustomOrderPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Timeline:</span><span className="font-medium text-[#B8922A]">2–4 weeks</span></div>
               </div>
             </div>
+            <div className="mb-5">
+              <TurnstileWidget
+                key={customOrderTurnstileReset}
+                onVerify={setCustomOrderTurnstileToken}
+                onError={setSubmitError}
+              />
+            </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-              <button disabled={submitting || !form.name || !form.email || !form.phone} onClick={handleSubmit} className="flex-1 bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+              <button disabled={submitting || !form.name || !form.email || !form.phone || !customOrderTurnstileToken} onClick={handleSubmit} className="flex-1 bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
                 {submitting ? (referenceFiles.length ? "Uploading & submitting…" : "Submitting…") : "Submit Order"} <Send size={15}/>
               </button>
             </div>
@@ -1939,6 +1941,8 @@ function LoginPage({ redirectPath = "/account" }: { redirectPath?: string }) {
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [loginTurnstileToken, setLoginTurnstileToken] = useState("");
+  const [loginTurnstileReset, setLoginTurnstileReset] = useState(0);
 
   const redirectTo = `${window.location.origin}${redirectPath}`;
 
@@ -1957,22 +1961,29 @@ function LoginPage({ redirectPath = "/account" }: { redirectPath?: string }) {
 
   const handleMagicLink = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!loginTurnstileToken) {
+      setError("Complete the security verification before requesting a sign-in link.");
+      return;
+    }
     setSending(true);
     setError("");
     setMessage("");
-    if (!supabase) {
-      setError("Supabase is not configured yet.");
+    try {
+      if (!supabase) throw new Error("Supabase is not configured yet.");
+      await verifyTurnstileToken(loginTurnstileToken);
+      const { error: authError } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: redirectTo },
+      });
+      if (authError) throw authError;
+      setMessage("Check your email for a secure sign-in link.");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "We couldn't send a sign-in link. Please try again.");
+    } finally {
       setSending(false);
-      return;
+      setLoginTurnstileToken("");
+      setLoginTurnstileReset((value) => value + 1);
     }
-
-    const { error: authError } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: redirectTo },
-    });
-    if (authError) setError(authError.message);
-    else setMessage("Check your email for a secure sign-in link.");
-    setSending(false);
   };
 
   return (
@@ -2002,7 +2013,12 @@ function LoginPage({ redirectPath = "/account" }: { redirectPath?: string }) {
           <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email address</label>
           <input id="login-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-          <button type="submit" disabled={sending || !isSupabaseConfigured}
+          <TurnstileWidget
+            key={loginTurnstileReset}
+            onVerify={setLoginTurnstileToken}
+            onError={setError}
+          />
+          <button type="submit" disabled={sending || !isSupabaseConfigured || !loginTurnstileToken}
             className="w-full bg-[#C4562A] hover:bg-[#A8411B] disabled:opacity-50 text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
             <Mail size={15} /> {sending ? "Sending link…" : "Email me a magic link"}
           </button>
@@ -2685,15 +2701,22 @@ function ContactPage() {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
+  const [contactTurnstileToken, setContactTurnstileToken] = useState("");
+  const [contactTurnstileReset, setContactTurnstileReset] = useState(0);
   const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
   const mapUrl = getGoogleMapsUrl(settings);
 
   const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!contactTurnstileToken) {
+      setSendError("Complete the security verification before sending your message.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     setSending(true);
     setSendError("");
     try {
+      await verifyTurnstileToken(contactTurnstileToken);
       await submitContactMessage({
         name: String(formData.get("name") ?? ""),
         email: String(formData.get("email") ?? ""),
@@ -2705,6 +2728,8 @@ function ContactPage() {
       setSendError(error instanceof Error ? error.message : "We couldn't send your message. Please try again.");
     } finally {
       setSending(false);
+      setContactTurnstileToken("");
+      setContactTurnstileReset((value) => value + 1);
     }
   };
   return (
@@ -2749,7 +2774,12 @@ function ContactPage() {
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Message</label>
                 <textarea name="message" required rows={5} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
               </div>
-              <button disabled={sending} type="submit" className="w-full bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
+              <TurnstileWidget
+                key={contactTurnstileReset}
+                onVerify={setContactTurnstileToken}
+                onError={setSendError}
+              />
+              <button disabled={sending || !contactTurnstileToken} type="submit" className="w-full bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
                 {sending ? "Sending…" : "Send Message"} <Send size={15}/>
               </button>
               {sendError && <p role="alert" className="text-sm text-red-600">{sendError}</p>}
@@ -4909,7 +4939,7 @@ export default function App() {
     <WishlistContext.Provider value={{ ids: wishlistIds, toggle: toggleWishlistItem, isAuthenticated: Boolean(session) }}>
     <div className="bg-background min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
       <SeoHead page={page} product={seoProduct} settings={storeContent.settings} />
-      <CustomerNav page={page} setPage={setPageNav} cartCount={cartItems.reduce((s,i) => s + i.qty, 0)} onAdminEnter={() => navigateTo("/admin")} isAuthenticated={Boolean(session)} />
+      <CustomerNav page={page} setPage={setPageNav} cartCount={cartItems.reduce((s,i) => s + i.qty, 0)} isAuthenticated={Boolean(session)} />
       {storeLoading && <FashionLoader className="pt-16" label="Curating the collection…" />}
       {storeError && <div className="min-h-screen pt-24 flex items-center justify-center text-red-600">{storeError}</div>}
       {!storeLoading && !storeError && page === "home" && <HomePage setPage={setPageNav} addToCart={addToCart} />}

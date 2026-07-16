@@ -1,5 +1,25 @@
 project_id = "aunty-sala-fashion-gh"
 
+[auth]
+site_url = "https://auntysalafashiongh.store"
+additional_redirect_urls = [
+  "http://localhost:5173/**",
+  "http://127.0.0.1:5173/**",
+  "https://auntysalafashiongh.store/**",
+  "https://www.auntysalafashiongh.store/**",
+  "https://aunty-sala-fashion-gh.pages.dev/**",
+  "https://aunty-sala-fashion-gh-store.web.app/**"
+]
+
+[auth.email]
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
 [db.seed]
 enabled = true
 sql_paths = ["./seed.sql"]
