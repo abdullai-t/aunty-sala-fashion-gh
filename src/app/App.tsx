@@ -512,26 +512,31 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
   return (
     <div className="min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
       {/* Hero */}
-      <section className="relative h-[92vh] min-h-[600px] flex items-end bg-[#2A1810]">
+      <section className="relative flex h-[100svh] min-h-[660px] max-h-[820px] items-end overflow-hidden bg-[#2A1810] md:h-[92vh] md:min-h-[600px] md:max-h-none">
         <ManagedImage src={siteMedia.home_hero} alt="Aunty Sala Fashion Gh collection"
           onLoad={() => setHeroLoaded(true)}
-          className={`absolute inset-0 w-full h-full object-cover object-top transition-opacity duration-700 ${heroLoaded ? "opacity-90" : "opacity-0"}`} />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#1A0E08]/80 via-[#1A0E08]/40 to-transparent" />
-        <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-10 pb-20 w-full">
-          <p className="text-[#B8922A] text-xs tracking-[0.22em] uppercase mb-4 font-semibold">Aunty Sala Fashion Gh — Official Online Fashion Store</p>
-          <h1 className="text-white text-5xl md:text-6xl lg:text-7xl font-bold leading-none mb-6 max-w-4xl" style={{ fontFamily: "var(--font-display)" }}>
-            Your Inner Diva,<br /><em className="not-italic text-[#C4562A]">Everything Fashionable.</em>
-          </h1>
-          <p className="text-white/70 text-lg max-w-sm mb-8 leading-relaxed">
-            Made-to-measure dresses woven from the finest kente, ankara &amp; batik — crafted in Accra, for women everywhere.
+          className={`absolute inset-0 h-full w-full object-cover object-[82%_center] transition-opacity duration-700 md:object-top ${heroLoaded ? "opacity-90" : "opacity-0"}`} />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#160B06] via-[#160B06]/35 to-black/10 md:bg-gradient-to-r md:from-[#1A0E08]/80 md:via-[#1A0E08]/40 md:to-transparent" />
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-5 pb-10 sm:px-6 sm:pb-14 lg:px-10 lg:pb-20">
+          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#D1A938] sm:text-xs md:mb-4 md:tracking-[0.22em]">
+            <span className="md:hidden">Aunty Sala Fashion Gh</span>
+            <span className="hidden md:inline">Aunty Sala Fashion Gh — Official Online Fashion Store</span>
           </p>
-          <div className="flex flex-wrap gap-4">
+          <h1 className="mb-4 max-w-[20rem] text-[clamp(2.8rem,13vw,4rem)] font-bold leading-[0.92] text-white sm:max-w-xl sm:text-6xl md:mb-6 md:max-w-4xl md:text-6xl md:leading-none lg:text-7xl" style={{ fontFamily: "var(--font-display)" }}>
+            Your Inner Diva<span className="text-[#C4562A] md:text-white">.</span>
+            <em className="hidden not-italic text-[#C4562A] md:inline"><br />Everything Fashionable.</em>
+          </h1>
+          <p className="mb-6 max-w-[17rem] text-sm leading-relaxed text-white/75 sm:max-w-sm md:mb-8 md:text-lg">
+            <span className="md:hidden">Contemporary Ghanaian fashion, made for you.</span>
+            <span className="hidden md:inline">Made-to-measure dresses woven from the finest kente, ankara &amp; batik — crafted in Accra, for women everywhere.</span>
+          </p>
+          <div className="grid max-w-sm grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-4">
             <button onClick={() => setPage("shop")}
-              className="bg-[#C4562A] hover:bg-[#A8411B] text-white px-8 py-3.5 text-sm font-semibold tracking-wide rounded transition-colors flex items-center gap-2">
+              className="flex items-center justify-center gap-2 rounded bg-[#C4562A] px-4 py-3 text-xs font-semibold tracking-wide text-white transition-colors hover:bg-[#A8411B] sm:px-8 sm:py-3.5 sm:text-sm">
               Shop Now <ArrowRight size={16} />
             </button>
             <button onClick={() => setPage("custom")}
-              className="border border-white/50 hover:border-white text-white px-8 py-3.5 text-sm font-semibold tracking-wide rounded transition-colors">
+              className="rounded border border-white/50 px-4 py-3 text-xs font-semibold tracking-wide text-white transition-colors hover:border-white sm:px-8 sm:py-3.5 sm:text-sm">
               Custom Order
             </button>
           </div>
