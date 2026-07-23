@@ -56,13 +56,19 @@ import {
   Trash2, Upload, Clock, TrendingUp, AlertCircle, Eye, Edit,
   Download, Printer, LogOut, Bell, ChevronLeft, ChevronRight,
   Calendar, DollarSign, Send, CreditCard, ChevronDown, Truck,
-  Award, User, Home, Tag, Filter, LayoutGrid, LayoutList, Zap,
+  Award, User, Home, Tag, Filter, LayoutGrid, LayoutList, Zap, Music2,
   CheckCircle, Circle, Archive
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
 } from "recharts";
+
+// This single-page app owns route scrolling. Prevent the browser from restoring
+// a stale scroll position after asynchronously loaded storefront content mounts.
+if ("scrollRestoration" in window.history) {
+  window.history.scrollRestoration = "manual";
+}
 
 // ─── Data ──────────────────────────────────────────────────────────────────
 type Product = StoreProduct;
@@ -323,7 +329,7 @@ function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
   }, []);
 
   const links = [
-    { label: "Shop", page: "shop" }, { label: "Custom Order", page: "custom" },
+    { label: "Home", page: "home" }, { label: "Shop", page: "shop" }, { label: "Custom Order", page: "custom" },
     { label: "About", page: "about" }, { label: "Contact", page: "contact" },
   ];
 
@@ -400,6 +406,12 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
       label: `Instagram ${instagram.label}`,
       href: instagram.href,
       icon: Instagram,
+      external: true,
+    },
+    {
+      label: "TikTok @auntsala.big.bran",
+      href: "https://www.tiktok.com/@auntsala.big.bran",
+      icon: Music2,
       external: true,
     },
     whatsappUrl && {
@@ -1991,48 +2003,81 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
     }
   };
 
+  const isAdminLogin = context === "admin";
+
   return (
-    <div className="min-h-screen pt-24 pb-16 flex items-center justify-center px-6" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="w-full max-w-md bg-card border border-border/50 rounded-2xl shadow-sm p-7 sm:p-9">
-        <div className="text-center mb-7">
-          <div className="w-14 h-14 rounded-full bg-[#C4562A]/10 text-[#C4562A] flex items-center justify-center mx-auto mb-4">
-            <User size={24} />
+    <div className={`relative flex min-h-screen items-start justify-center overflow-y-auto px-4 py-6 sm:px-6 ${isAdminLogin ? "bg-[#2B2822]" : "fixed inset-0 z-[80] bg-transparent"}`} style={{ fontFamily: "var(--font-body)" }}>
+      {!isAdminLogin ? <>
+        <img src="/aunty-sala-hero-elegant.webp" alt="" aria-hidden="true" className="pointer-events-none fixed inset-0 h-full w-full scale-105 object-cover object-center" />
+        <div className="pointer-events-none fixed inset-0 bg-[#141311]/65 backdrop-blur-[6px]" />
+        <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-black/25 via-transparent to-[#C4562A]/15" />
+        <a href="/" aria-label="Close sign in and return to the store" className="fixed right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/35 text-white shadow-lg backdrop-blur-md transition-colors hover:bg-black/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 sm:right-6 sm:top-6"><X size={19} /></a>
+      </> : null}
+      <div className="pointer-events-none fixed -left-24 top-1/4 h-72 w-72 rounded-full bg-[#C4562A]/15 blur-3xl" />
+      <div className="pointer-events-none fixed -right-20 bottom-0 h-80 w-80 rounded-full bg-[#B8922A]/15 blur-3xl" />
+
+      <div className="relative z-10 my-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/40 bg-card shadow-[0_30px_90px_rgba(0,0,0,0.35)] lg:min-h-[700px] lg:grid-cols-[1.08fr_0.92fr]">
+        <section className="relative hidden overflow-hidden bg-[#1A1A18] lg:flex lg:flex-col lg:justify-between" aria-label="Aunty Sala Fashion Gh">
+          <img src="/aunty-sala-hero-elegant.webp" alt="Model wearing an Aunty Sala African print dress" className="absolute inset-0 h-full w-full object-cover object-center" />
+          <div className={`absolute inset-0 bg-gradient-to-b ${isAdminLogin ? "from-black/10 via-black/5 to-black/65" : "from-black/20 via-black/10 to-black/85"}`} />
+          <div className={`absolute inset-0 bg-gradient-to-r ${isAdminLogin ? "from-black/15 via-transparent to-black/5" : "from-black/25 via-transparent to-black/15"}`} />
+
+          <div className="relative flex items-center gap-3 p-8">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-black/25 backdrop-blur-md"><img src="/aunty-sala-logo.png" alt="" className="h-11 w-auto object-contain" /></span>
+            <div><p className="font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala Fashion Gh</p><p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-[#E0BD5B]">Everything fashionable</p></div>
           </div>
-          <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>{context === "admin" ? "Admin sign in" : "Welcome back"}</h1>
-          <p className="text-sm text-muted-foreground mt-2">
-            {context === "admin" ? "Sign in with an authorized staff account to access the admin portal." : "Sign in to view your profile, orders, and saved details."}
-          </p>
-        </div>
 
-        <button onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
-          className="w-full border border-border rounded-lg py-3 font-semibold text-sm hover:border-[#C4562A] transition-colors disabled:opacity-50 flex items-center justify-center gap-3">
-          <span className="w-5 h-5 rounded-full border border-border flex items-center justify-center text-xs font-bold">G</span>
-          Continue with Google
-        </button>
+          <div className="relative p-8 xl:p-10">
+            <span className="mb-4 inline-flex rounded-full border border-white/15 bg-black/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#E0BD5B] backdrop-blur-md">{isAdminLogin ? "Private workspace" : "Made in Accra"}</span>
+            <h2 className="max-w-lg text-4xl font-bold leading-[1.08] text-white xl:text-5xl" style={{ fontFamily: "var(--font-display)" }}>
+              {isAdminLogin ? "Your store, beautifully managed." : "Your style journey continues here."}
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-relaxed text-white/65">
+              {isAdminLogin ? "Access orders, customers, tailoring and storefront tools from one secure workspace." : "Return to your saved pieces, custom measurements and every order made with care."}
+            </p>
+            <div className="mt-7 flex flex-wrap gap-2.5">
+              {(isAdminLogin ? ["Secure staff access", "Live store data", "Protected workspace"] : ["Saved wishlist", "Order tracking", "Custom measurements"]).map((item) => <span key={item} className="inline-flex items-center gap-1.5 rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-[10px] font-semibold text-white/80 backdrop-blur-md"><Check size={11} className="text-[#E0BD5B]" />{item}</span>)}
+            </div>
+          </div>
+        </section>
 
-        <div className="flex items-center gap-3 my-6">
-          <div className="h-px bg-border flex-1" />
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">or use email</span>
-          <div className="h-px bg-border flex-1" />
-        </div>
+        <section className="relative flex items-center bg-[#FCFAF7] px-5 py-8 sm:px-10 sm:py-12 lg:px-12 xl:px-14">
+          <div className="mx-auto w-full max-w-md">
+            <div className="mb-8 flex items-center justify-between lg:hidden">
+              <div className="flex items-center gap-3"><img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh" className="h-12 w-auto object-contain" /><div><p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala</p><p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#B8922A]">Fashion Gh</p></div></div>
+              <span className="rounded-full bg-[#C4562A]/8 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#C4562A]">{isAdminLogin ? "Admin" : "Account"}</span>
+            </div>
 
-        <form onSubmit={handleMagicLink} className="space-y-3">
-          <label htmlFor="login-email" className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email address</label>
-          <input id="login-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)}
-            placeholder="you@example.com" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
-          <TurnstileWidget
-            key={loginTurnstileReset}
-            onVerify={setLoginTurnstileToken}
-            onError={setError}
-          />
-          <button type="submit" disabled={sending || !isSupabaseConfigured || !loginTurnstileToken}
-            className="w-full bg-[#C4562A] hover:bg-[#A8411B] disabled:opacity-50 text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2">
-            <Mail size={15} /> {sending ? "Sending link…" : "Email me a magic link"}
-          </button>
-        </form>
+            <div className="mb-7">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#B8922A]/20 bg-[#B8922A]/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A6E1E]"><User size={12} />{isAdminLogin ? "Authorized team members" : "Your personal account"}</div>
+              <h1 className="text-3xl font-bold leading-tight text-[#1A1A18] sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>{isAdminLogin ? "Welcome to the studio" : "Welcome back"}</h1>
+              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">{isAdminLogin ? "Sign in with your approved staff email to continue to the admin portal." : "Sign in securely to continue shopping and manage your Aunty Sala experience."}</p>
+            </div>
 
-        {message && <p role="status" className="mt-4 text-sm text-green-700 bg-green-50 rounded-lg p-3 text-center">{message}</p>}
-        {error && <p role="alert" className="mt-4 text-sm text-red-600 bg-red-50 rounded-lg p-3 text-center">{error}</p>}
+            <button type="button" onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
+              className="group flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm font-bold text-[#1A1A18] shadow-[0_4px_14px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#C4562A]/35 hover:shadow-[0_8px_22px_rgba(26,26,24,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/10 disabled:cursor-not-allowed disabled:opacity-50">
+              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-sm font-black text-[#4285F4] shadow-sm">G</span>
+              Continue with Google
+            </button>
+
+            <div className="my-6 flex items-center gap-3" aria-hidden="true"><div className="h-px flex-1 bg-border" /><span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">or sign in without a password</span><div className="h-px flex-1 bg-border" /></div>
+
+            <form onSubmit={handleMagicLink} className="space-y-4">
+              <label htmlFor="login-email" className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Email address</span><div className="relative"><Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" /><input id="login-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="min-h-12 w-full rounded-xl border border-border bg-white py-3 pl-11 pr-4 text-sm transition-all placeholder:text-muted-foreground/45 focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" /></div></label>
+              <div className="overflow-hidden rounded-xl border border-border/60 bg-white p-3"><TurnstileWidget key={loginTurnstileReset} onVerify={setLoginTurnstileToken} onError={setError} /></div>
+              <button type="submit" disabled={sending || !isSupabaseConfigured || !loginTurnstileToken}
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(196,86,42,0.22)] transition-all hover:-translate-y-0.5 hover:bg-[#A8411B] hover:shadow-[0_14px_28px_rgba(196,86,42,0.26)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0">
+                <Mail size={15} /> {sending ? "Sending your secure link…" : "Send me a magic link"}
+              </button>
+            </form>
+
+            {message ? <p role="status" className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle size={17} className="mt-0.5 shrink-0" />{message}</p> : null}
+            {error ? <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={17} className="mt-0.5 shrink-0" />{error}</p> : null}
+
+            <div className="mt-6 flex items-start gap-2.5 rounded-xl bg-[#F3ECE2]/70 p-3 text-[11px] leading-relaxed text-muted-foreground"><CheckCircle size={15} className="mt-0.5 shrink-0 text-[#7A8C6E]" /><p>We use passwordless sign-in to protect your account. Your secure email link can only be used once.</p></div>
+            <p className="mt-6 text-center text-[10px] leading-relaxed text-muted-foreground">By continuing, you agree to our <a href={isAdminLogin ? `${STORE_ORIGIN}/terms-of-service` : "/terms-of-service"} className="font-semibold text-[#C4562A] hover:underline">Terms of Service</a> and <a href={isAdminLogin ? `${STORE_ORIGIN}/privacy-policy` : "/privacy-policy"} className="font-semibold text-[#C4562A] hover:underline">Privacy Policy</a>.</p>
+          </div>
+        </section>
       </div>
     </div>
   );
@@ -4749,12 +4794,24 @@ const PAGE_PATHS: Record<string, string> = {
   "terms-of-service": "/terms-of-service",
 };
 
-const STORE_ORIGIN = (import.meta.env.VITE_STORE_ORIGIN || "https://auntysalafashiongh.store").replace(/\/$/, "");
-const ADMIN_ORIGIN = (import.meta.env.VITE_ADMIN_ORIGIN || "https://admin.auntysalafashiongh.store").replace(/\/$/, "");
-const ADMIN_HOSTNAME = new URL(ADMIN_ORIGIN).hostname;
+const CONFIGURED_STORE_ORIGIN = (import.meta.env.VITE_STORE_ORIGIN || "https://auntysalafashiongh.store").replace(/\/$/, "");
+const CONFIGURED_ADMIN_ORIGIN = (import.meta.env.VITE_ADMIN_ORIGIN || "https://admin.auntysalafashiongh.store").replace(/\/$/, "");
+const SHOP_DOMAIN = "auntysalafashiongh.shop";
+const currentHostname = window.location.hostname.toLowerCase();
+const usesShopDomain = currentHostname === SHOP_DOMAIN
+  || currentHostname === `www.${SHOP_DOMAIN}`
+  || currentHostname === `admin.${SHOP_DOMAIN}`;
+const STORE_ORIGIN = usesShopDomain ? `https://${SHOP_DOMAIN}` : CONFIGURED_STORE_ORIGIN;
+const ADMIN_ORIGIN = usesShopDomain ? `https://admin.${SHOP_DOMAIN}` : CONFIGURED_ADMIN_ORIGIN;
+const ADMIN_HOSTNAMES = new Set([
+  new URL(CONFIGURED_ADMIN_ORIGIN).hostname,
+  "admin.auntysalafashiongh.store",
+  `admin.${SHOP_DOMAIN}`,
+  "admin.localhost",
+]);
 
 function isAdminHostname(hostname: string) {
-  return hostname === ADMIN_HOSTNAME || hostname === "admin.localhost";
+  return ADMIN_HOSTNAMES.has(hostname.toLowerCase());
 }
 
 function adminPageFromPath(path: string, adminHost: boolean) {
@@ -4898,8 +4955,20 @@ export default function App() {
   }, [session?.user.id]);
 
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [page, isAdmin, adminPage]);
+    const storefrontPageLoadsAsync = page === "home"
+      || page === "shop"
+      || page === "contact"
+      || page.startsWith("product-");
+
+    // Wait until the loader has been replaced by the real page. Otherwise the
+    // browser can retain the loader's scroll offset when the taller page mounts.
+    if (!isAdmin && storefrontPageLoadsAsync && storeLoading) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [page, isAdmin, adminPage, storeLoading]);
 
   useEffect(() => {
     if (!isAdmin) return;
