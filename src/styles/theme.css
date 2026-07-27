@@ -1,6 +1,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  --brand-primary: #C4562A;
+  --brand-primary-hover: #A8411B;
+  --brand-accent: #B8922A;
+  --brand-background: #FAF7F2;
+  --brand-foreground: #1A1A18;
+  --brand-muted: #E8E2D9;
   --font-size: 16px;
   --background: #FAF7F2;
   --foreground: #1A1A18;

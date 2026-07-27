@@ -1087,7 +1087,8 @@ export async function updateOrderStatus(orderId: string, status: string): Promis
 
 export async function saveStoreSettings(settings: Record<string, string>): Promise<void> {
   if (!supabase) throw new Error("Supabase is not configured yet.");
-  const entries = Object.entries(settings).map(([key, value]) => ({ key, value, is_public: true }));
+  const privateKeys = new Set(["order_prefix", "custom_order_prefix", "notification_admin_email", "notification_admin_whatsapp"]);
+  const entries = Object.entries(settings).map(([key, value]) => ({ key, value, is_public: !privateKeys.has(key) }));
   if (!entries.length) return;
   const { error } = await supabase.from("store_settings").upsert(entries, { onConflict: "key" });
   if (error) throw error;

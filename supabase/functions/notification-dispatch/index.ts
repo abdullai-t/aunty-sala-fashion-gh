@@ -17,7 +17,16 @@ const escapeHtml = (value: unknown) => String(value ?? "")
   .replaceAll('"', "&quot;")
   .replaceAll("'", "&#039;");
 
-const money = (payload: Record<string, unknown>) => `${escapeHtml(payload.currency ?? "GHS")} ${Number(payload.total ?? 0).toFixed(2)}`;
+const brandName = Deno.env.get("PUBLIC_BRAND_NAME") || "Aunty Sala Fashion Gh";
+const brandTagline = Deno.env.get("PUBLIC_BRAND_TAGLINE") || "Your inner diva, everything fashionable.";
+const brandCurrency = Deno.env.get("PUBLIC_CURRENCY") || "GHS";
+const publicSiteUrl = (Deno.env.get("PUBLIC_SITE_URL") || "https://auntysalafashiongh.store").replace(/\/+$/, "");
+const logoUrl = Deno.env.get("PUBLIC_LOGO_URL") || `${publicSiteUrl}/aunty-sala-logo.png`;
+const brandPrimary = Deno.env.get("PUBLIC_BRAND_PRIMARY") || "#b8922a";
+const brandBackground = Deno.env.get("PUBLIC_BRAND_BACKGROUND") || "#faf7f2";
+const brandForeground = Deno.env.get("PUBLIC_BRAND_FOREGROUND") || "#1a1a18";
+
+const money = (payload: Record<string, unknown>) => `${escapeHtml(payload.currency ?? brandCurrency)} ${Number(payload.total ?? 0).toFixed(2)}`;
 const orderItems = (payload: Record<string, unknown>) => Array.isArray(payload.items) && payload.items.length
   ? `<ul>${payload.items.map((item: Record<string, unknown>) => `<li>${escapeHtml(item.name)} × ${escapeHtml(item.quantity)}${item.size ? ` — size ${escapeHtml(item.size)}` : ""}</li>`).join("")}</ul>`
   : "";
@@ -25,14 +34,12 @@ const orderItems = (payload: Record<string, unknown>) => Array.isArray(payload.i
 function emailContent(notification: Notification): string {
   const payload = notification.payload;
   const customerName = escapeHtml(payload.customerName || "there");
-  const publicSiteUrl = (Deno.env.get("PUBLIC_SITE_URL") || "https://auntysalafashiongh.store").replace(/\/+$/, "");
-  const logoUrl = `${publicSiteUrl}/aunty-sala-logo.png`;
-  let heading = notification.subject ?? "Aunty Sala Fashion Gh update";
+  let heading = notification.subject ?? `${brandName} update`;
   let content = "<p>We have an update for you.</p>";
 
   switch (notification.event_type) {
     case "account_created":
-      heading = "Welcome to Aunty Sala Fashion Gh";
+      heading = `Welcome to ${brandName}`;
       content = `<p>Hello ${customerName},</p><p>Your account has been created. You can now track orders, save addresses and measurements, and manage your wishlist.</p>`;
       break;
     case "admin_account_created":
@@ -66,11 +73,11 @@ function emailContent(notification: Notification): string {
       content = `<p>A verified custom-order payment was received.</p><p><strong>Reference:</strong> ${escapeHtml(payload.reference)}<br><strong>Customer:</strong> ${customerName} (${escapeHtml(payload.customerEmail)})<br><strong>Payment type:</strong> ${escapeHtml(payload.paymentKind)}<br><strong>Amount:</strong> ${money(payload)}<br><strong>Payment status:</strong> ${escapeHtml(payload.paymentStatus)}</p>`;
       break;
     case "newsletter_subscribed":
-      content = "<p>Thanks for joining the Aunty Sala Fashion Gh newsletter.</p><p>You will receive new collections, style stories, and selected offers from us.</p>";
+      content = `<p>Thanks for joining the ${escapeHtml(brandName)} newsletter.</p><p>You will receive new collections, style stories, and selected offers from us.</p>`;
       break;
   }
 
-  return `<!doctype html><html><body style="margin:0;background:#faf7f2;color:#1a1a18;font-family:Arial,sans-serif"><div style="max-width:600px;margin:auto;padding:32px 20px"><div style="border-top:6px solid #b8922a;background:#fff;padding:32px;border-radius:10px"><div style="text-align:center;margin:0 0 18px"><img src="${escapeHtml(logoUrl)}" width="92" alt="Aunty Sala Fashion Gh" style="display:block;width:92px;max-width:100%;height:auto;margin:0 auto;border:0"></div><p style="margin:0 0 8px;color:#b8922a;font-size:12px;letter-spacing:2px;text-transform:uppercase;text-align:center">Aunty Sala Fashion Gh</p><h1 style="font-size:24px;margin:0 0 20px">${escapeHtml(heading)}</h1><div style="font-size:15px;line-height:1.7;color:#4a4742">${content}</div></div><p style="font-size:11px;color:#777;text-align:center;margin-top:20px">Your inner diva, everything fashionable.</p></div></body></html>`;
+  return `<!doctype html><html><body style="margin:0;background:${escapeHtml(brandBackground)};color:${escapeHtml(brandForeground)};font-family:Arial,sans-serif"><div style="max-width:600px;margin:auto;padding:32px 20px"><div style="border-top:6px solid ${escapeHtml(brandPrimary)};background:#fff;padding:32px;border-radius:10px"><div style="text-align:center;margin:0 0 18px"><img src="${escapeHtml(logoUrl)}" width="92" alt="${escapeHtml(brandName)}" style="display:block;width:92px;max-width:100%;height:auto;margin:0 auto;border:0"></div><p style="margin:0 0 8px;color:${escapeHtml(brandPrimary)};font-size:12px;letter-spacing:2px;text-transform:uppercase;text-align:center">${escapeHtml(brandName)}</p><h1 style="font-size:24px;margin:0 0 20px">${escapeHtml(heading)}</h1><div style="font-size:15px;line-height:1.7;color:#4a4742">${content}</div></div><p style="font-size:11px;color:#777;text-align:center;margin-top:20px">${escapeHtml(brandTagline)}</p></div></body></html>`;
 }
 
 async function sendEmail(notification: Notification): Promise<string> {
@@ -81,9 +88,9 @@ async function sendEmail(notification: Notification): Promise<string> {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "User-Agent": "aunty-sala-fashion-gh-notifications/1.0",
+      "User-Agent": "fashion-commerce-notifications/1.0",
     },
-    body: JSON.stringify({ from, to: [notification.recipient], subject: notification.subject ?? "Aunty Sala Fashion Gh update", html: emailContent(notification) }),
+    body: JSON.stringify({ from, to: [notification.recipient], subject: notification.subject ?? `${brandName} update`, html: emailContent(notification) }),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result?.message ?? "Resend rejected the email.");
@@ -95,7 +102,7 @@ async function sendWhatsApp(notification: Notification): Promise<string> {
   const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID")!;
   const graphVersion = Deno.env.get("WHATSAPP_GRAPH_API_VERSION")!;
   const templateName = Deno.env.get("WHATSAPP_TEMPLATE_NAME");
-  const text = String(notification.payload.whatsappText ?? notification.subject ?? "New Aunty Sala Fashion Gh notification.");
+  const text = String(notification.payload.whatsappText ?? notification.subject ?? `New ${brandName} notification.`);
   const message = templateName ? {
     messaging_product: "whatsapp",
     to: notification.recipient.replace(/\D/g, ""),

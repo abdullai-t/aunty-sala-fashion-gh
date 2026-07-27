@@ -49,6 +49,8 @@ import {
 import { uploadManyToCloudinary, type CloudinaryAsset } from "../lib/cloudinary";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import { TurnstileWidget, verifyTurnstileToken } from "../lib/turnstile";
+import { formatClientMoney, isAdminHostname as isConfiguredAdminHostname, resolveDomainPair } from "../config/client";
+import { clientConfig } from "../config/clients";
 import {
   ShoppingCart, Menu, X, Star, Heart, Search, Package, Users,
   BarChart2, Settings, ShoppingBag, Scissors, MessageCircle,
@@ -83,7 +85,7 @@ const EMPTY_ADMIN_DATA: AdminData = { orders: [], customPayments: [], customers:
 type AdminDataContextValue = AdminData & { refresh: () => Promise<void> };
 const AdminDataContext = createContext<AdminDataContextValue>({ ...EMPTY_ADMIN_DATA, refresh: async () => {} });
 const useAdminData = () => useContext(AdminDataContext);
-const PIE_COLORS = ["#C4562A","#B8922A","#7A8C6E","#4A6B8A","#8B5E3C"];
+const PIE_COLORS = ["var(--brand-primary)","var(--brand-accent)","#7A8C6E","#4A6B8A","#8B5E3C"];
 
 const KANBAN_COLS: { key: string; label: string; color: string }[] = [
   { key: "new", label: "New", color: "bg-blue-100 text-blue-800" },
@@ -100,13 +102,13 @@ const KANBAN_COLS: { key: string; label: string; color: string }[] = [
 
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-const ghs = (n: number) => `GH₵ ${n.toLocaleString()}`;
+const ghs = (n: number) => formatClientMoney(clientConfig, n);
 const settingString = (settings: Record<string, unknown>, key: string) => {
   const value = settings[key];
   return typeof value === "string" ? value.trim() : "";
 };
 const getInstagramProfile = (settings: Record<string, unknown>) => {
-  const configured = settingString(settings, "instagram_handle").replace(/^@(?=https?:\/\/)/i, "");
+  const configured = (settingString(settings, "instagram_handle") || clientConfig.social.instagram || "").replace(/^@(?=https?:\/\/)/i, "");
   if (!configured) return null;
   const isUrl = /^https?:\/\//i.test(configured);
   const handle = (isUrl ? configured.replace(/^https?:\/\/(?:www\.)?instagram\.com\//i, "") : configured)
@@ -119,7 +121,10 @@ const getInstagramProfile = (settings: Record<string, unknown>) => {
   };
 };
 const getWhatsAppUrl = (settings: Record<string, unknown>, message: string) => {
-  const configured = settingString(settings, "whatsapp_number") || settingString(settings, "store_phone");
+  const configured = settingString(settings, "whatsapp_number")
+    || settingString(settings, "store_phone")
+    || clientConfig.contact.whatsapp
+    || clientConfig.contact.phone;
   let number = configured.replace(/\D/g, "");
   if (number.startsWith("0")) number = `233${number.slice(1)}`;
   return number ? `https://wa.me/${number}?text=${encodeURIComponent(message)}` : "";
@@ -128,6 +133,8 @@ const getGoogleMapsUrl = (settings: Record<string, unknown>) => {
   const address = settingString(settings, "store_address");
   return address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "";
 };
+const brandName = clientConfig.name;
+const brandShortName = clientConfig.shortName;
 
 function SeoHead({ page, product, settings, isAdmin = false }: { page: string; product?: Product; settings: Record<string, unknown>; isAdmin?: boolean }) {
   useEffect(() => {
@@ -135,44 +142,44 @@ function SeoHead({ page, product, settings, isAdmin = false }: { page: string; p
     const noIndex = isAdmin || privatePages.has(page);
     const pageMeta: Record<string, { title: string; description: string }> = {
       home: {
-        title: "Aunty Sala Fashion Gh | Ghanaian Fashion & Custom Dresses",
-        description: "Shop ready-to-wear and made-to-measure Ghanaian fashion from Aunty Sala Fashion Gh. Contemporary dresses crafted with beautiful African fabrics.",
+        title: clientConfig.seo.title,
+        description: clientConfig.seo.description,
       },
       shop: {
-        title: "Shop Ghanaian Dresses & African Fashion | Aunty Sala",
-        description: "Explore contemporary Ghanaian dresses, gowns, sets, and African-print fashion handcrafted by Aunty Sala Fashion Gh.",
+        title: `Shop the Collection | ${brandName}`,
+        description: `Explore ready-to-wear pieces and signature designs from ${brandName}.`,
       },
       custom: {
-        title: "Custom-Made Dresses in Ghana | Aunty Sala Fashion Gh",
-        description: "Order a made-to-measure dress crafted in Ghana. Choose your style and fabric, share your measurements, and let Aunty Sala create your piece.",
+        title: `Custom-Made Fashion | ${brandName}`,
+        description: `Request a made-to-measure piece from ${brandName}, tailored to your style and measurements.`,
       },
       about: {
-        title: "About Aunty Sala Fashion Gh | Crafted in Ghana",
-        description: "Discover the story, craftsmanship, and Ghanaian heritage behind Aunty Sala Fashion Gh and its made-to-measure designs.",
+        title: `About ${brandName}`,
+        description: `Discover the story, craftsmanship, and values behind ${brandName}.`,
       },
       contact: {
-        title: "Contact Aunty Sala Fashion Gh",
-        description: "Contact Aunty Sala Fashion Gh for custom dresses, sizing assistance, order support, and worldwide delivery enquiries.",
+        title: `Contact ${brandName}`,
+        description: `Contact ${brandName} for custom orders, sizing assistance, order support, and delivery enquiries.`,
       },
-      "help-sizing": { title: "Dress Sizing Guide | Aunty Sala Fashion Gh", description: "Find your best fit with the Aunty Sala Fashion Gh dress sizing and body measurement guide." },
-      "help-fabric-care": { title: "African Fabric Care Guide | Aunty Sala Fashion Gh", description: "Learn how to wash, dry, iron, and care for Ankara, kente, batik, and other African-fabric garments." },
-      "help-returns": { title: "Returns Policy | Aunty Sala Fashion Gh", description: "Read the returns, exchanges, alterations, and custom-order policy for Aunty Sala Fashion Gh." },
-      "help-faqs": { title: "Frequently Asked Questions | Aunty Sala Fashion Gh", description: "Answers about custom orders, sizing, worldwide delivery, order tracking, and Ghanaian fashion from Aunty Sala." },
-      "privacy-policy": { title: "Privacy Policy | Aunty Sala Fashion Gh", description: "Learn how Aunty Sala Fashion Gh collects, uses, protects, and shares personal information when you use our store." },
-      "terms-of-service": { title: "Terms of Service | Aunty Sala Fashion Gh", description: "Read the terms that apply when you browse, create an account, or place an order with Aunty Sala Fashion Gh." },
-      account: { title: "My Account | Aunty Sala Fashion Gh", description: "Manage your Aunty Sala Fashion Gh account and orders." },
-      cart: { title: "Shopping Cart | Aunty Sala Fashion Gh", description: "Review the items in your Aunty Sala Fashion Gh shopping cart." },
-      checkout: { title: "Secure Checkout | Aunty Sala Fashion Gh", description: "Complete your Aunty Sala Fashion Gh order securely." },
+      "help-sizing": { title: `Sizing Guide | ${brandName}`, description: `Find your best fit with the ${brandName} sizing and body measurement guide.` },
+      "help-fabric-care": { title: `Fabric Care Guide | ${brandName}`, description: `Learn how to care for garments purchased from ${brandName}.` },
+      "help-returns": { title: `Returns Policy | ${brandName}`, description: `Read the returns, exchanges, alterations, and custom-order policy for ${brandName}.` },
+      "help-faqs": { title: `Frequently Asked Questions | ${brandName}`, description: `Answers about custom orders, sizing, delivery, and order tracking from ${brandName}.` },
+      "privacy-policy": { title: `Privacy Policy | ${brandName}`, description: `Learn how ${brandName} collects, uses, protects, and shares personal information.` },
+      "terms-of-service": { title: `Terms of Service | ${brandName}`, description: `Read the terms that apply when you browse, create an account, or place an order with ${brandName}.` },
+      account: { title: `My Account | ${brandName}`, description: `Manage your ${brandName} account and orders.` },
+      cart: { title: `Shopping Cart | ${brandName}`, description: `Review the items in your ${brandName} shopping cart.` },
+      checkout: { title: `Secure Checkout | ${brandName}`, description: `Complete your ${brandName} order securely.` },
     };
     const meta = product ? {
-      title: `${product.name} | Aunty Sala Fashion Gh`,
+      title: `${product.name} | ${brandName}`,
       description: product.description.slice(0, 155),
     } : isAdmin ? {
-      title: "Admin Portal | Aunty Sala Fashion Gh",
-      description: "Aunty Sala Fashion Gh administration portal.",
+      title: `Admin Portal | ${brandName}`,
+      description: `${brandName} administration portal.`,
     } : pageMeta[page] ?? pageMeta.home;
     const canonicalUrl = new URL(window.location.pathname, window.location.origin).toString();
-    const imageUrl = product?.images[0] || new URL("/aunty-sala-logo.png", window.location.origin).toString();
+    const imageUrl = product?.images[0] || new URL(clientConfig.assets.logo, window.location.origin).toString();
 
     const setMeta = (selector: string, attribute: "name" | "property", key: string, content: string) => {
       let element = document.head.querySelector<HTMLMetaElement>(selector);
@@ -191,7 +198,7 @@ function SeoHead({ page, product, settings, isAdmin = false }: { page: string; p
     setMeta('meta[property="og:description"]', "property", "og:description", meta.description);
     setMeta('meta[property="og:url"]', "property", "og:url", canonicalUrl);
     setMeta('meta[property="og:image"]', "property", "og:image", imageUrl);
-    setMeta('meta[property="og:image:alt"]', "property", "og:image:alt", product?.name ?? "Aunty Sala Fashion Gh logo");
+    setMeta('meta[property="og:image:alt"]', "property", "og:image:alt", product?.name ?? `${brandName} logo`);
     setMeta('meta[name="twitter:card"]', "name", "twitter:card", "summary_large_image");
     setMeta('meta[name="twitter:title"]', "name", "twitter:title", meta.title);
     setMeta('meta[name="twitter:description"]', "name", "twitter:description", meta.description);
@@ -214,29 +221,29 @@ function SeoHead({ page, product, settings, isAdmin = false }: { page: string; p
       image: product.images,
       sku: product.sku,
       category: product.category,
-      brand: { "@type": "Brand", name: "Aunty Sala Fashion Gh" },
+      brand: { "@type": "Brand", name: brandName },
       offers: {
         "@type": "Offer",
         url: canonicalUrl,
-        priceCurrency: "GHS",
+        priceCurrency: clientConfig.currency,
         price: product.price,
         availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
       },
     } : {
       "@context": "https://schema.org",
       "@type": "Organization",
-      name: settingString(settings, "store_name") || "Aunty Sala Fashion Gh",
+      name: settingString(settings, "store_name") || brandName,
       url: window.location.origin,
-      logo: new URL("/aunty-sala-logo.png", window.location.origin).toString(),
+      logo: new URL(clientConfig.assets.logo, window.location.origin).toString(),
       email: settingString(settings, "store_email") || undefined,
       telephone: settingString(settings, "store_phone") || undefined,
-      address: settingString(settings, "store_address") ? { "@type": "PostalAddress", streetAddress: settingString(settings, "store_address"), addressCountry: "GH" } : undefined,
+      address: settingString(settings, "store_address") ? { "@type": "PostalAddress", streetAddress: settingString(settings, "store_address"), addressCountry: clientConfig.countryCode } : undefined,
       sameAs: instagram ? [instagram.href] : undefined,
     };
-    let structuredData = document.head.querySelector<HTMLScriptElement>('#aunty-sala-structured-data');
+    let structuredData = document.head.querySelector<HTMLScriptElement>('#client-structured-data');
     if (!structuredData) {
       structuredData = document.createElement("script");
-      structuredData.id = "aunty-sala-structured-data";
+      structuredData.id = "client-structured-data";
       structuredData.type = "application/ld+json";
       document.head.appendChild(structuredData);
     }
@@ -259,15 +266,15 @@ function ManagedImage({ src, alt, className, onLoad }: { src?: string; alt: stri
 function FashionLoader({ label = "Tailoring your experience…", compact = false, className = "" }: { label?: string; compact?: boolean; className?: string }) {
   return (
     <div role="status" aria-live="polite" aria-label={label} className={`${compact ? "min-h-64" : "min-h-screen"} ${className} flex flex-col items-center justify-center gap-5 px-6 bg-background`}>
-      <div className="relative w-24 h-28 flex items-center justify-center text-[#C4562A]" aria-hidden="true">
+      <div className="relative w-24 h-28 flex items-center justify-center text-[var(--brand-primary)]" aria-hidden="true">
         <svg className="fashion-loader-dress w-[86px] h-[102px] overflow-visible" viewBox="0 0 86 102" fill="none">
           <path d="M36 9C36 4 50 4 50 9L49 20L59 28L55 43C58 56 69 73 75 91C59 99 27 99 11 91C17 73 28 56 31 43L27 28L37 20ZM31 43C38 47 48 47 55 43" stroke="currentColor" strokeWidth="2.7" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="43" cy="23" r="3.5" className="fashion-loader-pin fill-[#B8922A]" />
+          <circle cx="43" cy="23" r="3.5" className="fashion-loader-pin fill-[var(--brand-accent)]" />
         </svg>
       </div>
       <div className="text-center">
-        <p className="font-semibold text-[#1A1A18]" style={{ fontFamily: "var(--font-display)" }}>{label}</p>
-        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#B8922A]">Aunty Sala Fashion Gh</p>
+        <p className="font-semibold text-[var(--brand-foreground)]" style={{ fontFamily: "var(--font-display)" }}>{label}</p>
+        <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.28em] text-[var(--brand-accent)]">{brandName}</p>
       </div>
       <span className="sr-only">Loading</span>
     </div>
@@ -295,9 +302,9 @@ function KenteStripe({ className = "" }: { className?: string }) {
       <svg width="100%" height="8" preserveAspectRatio="none">
         <defs>
           <pattern id="kente" x="0" y="0" width="40" height="8" patternUnits="userSpaceOnUse">
-            <rect width="10" height="8" fill="#C4562A"/>
-            <rect x="10" width="10" height="8" fill="#B8922A"/>
-            <rect x="20" width="10" height="8" fill="#1A1A18"/>
+            <rect width="10" height="8" fill="var(--brand-primary)"/>
+            <rect x="10" width="10" height="8" fill="var(--brand-accent)"/>
+            <rect x="20" width="10" height="8" fill="var(--brand-foreground)"/>
             <rect x="30" width="10" height="8" fill="#7A8C6E"/>
           </pattern>
         </defs>
@@ -311,7 +318,7 @@ function StarRating({ rating }: { rating: number }) {
   return (
     <div className="flex gap-0.5">
       {[1,2,3,4,5].map(i => (
-        <Star key={i} size={14} className={i <= rating ? "fill-[#B8922A] text-[#B8922A]" : "fill-muted text-muted"} />
+        <Star key={i} size={14} className={i <= rating ? "fill-[var(--brand-accent)] text-[var(--brand-accent)]" : "fill-muted text-muted"} />
       ))}
     </div>
   );
@@ -329,21 +336,22 @@ function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
   }, []);
 
   const links = [
-    { label: "Home", page: "home" }, { label: "Shop", page: "shop" }, { label: "Custom Order", page: "custom" },
+    { label: "Home", page: "home" }, { label: "Shop", page: "shop" },
+    ...(clientConfig.features.customOrders ? [{ label: "Custom Order", page: "custom" }] : []),
     { label: "About", page: "about" }, { label: "Contact", page: "contact" },
   ];
 
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled || page !== "home" ? "bg-[#FAF7F2]/95 backdrop-blur-sm shadow-sm" : "bg-gradient-to-b from-black/50 to-transparent"}`}>
+    <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled || page !== "home" ? "bg-[var(--brand-background)]/95 backdrop-blur-sm shadow-sm" : "bg-gradient-to-b from-black/50 to-transparent"}`}>
       <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between">
-        <button onClick={() => setPage("home")} className="flex items-center gap-2 leading-none" aria-label="Aunty Sala Fashion Gh home">
-          <img src="/aunty-sala-logo.png" alt="" className="h-12 w-auto object-contain" />
+        <button onClick={() => setPage("home")} className="flex items-center gap-2 leading-none" aria-label={`${brandName} home`}>
+          <img src={clientConfig.assets.logo} alt="" className="h-12 w-auto object-contain" />
           <span className="hidden sm:flex flex-col items-start">
-            <span className={`text-xl font-bold tracking-tight transition-colors ${!scrolled && page === "home" ? "text-white" : "text-[#1A1A18]"}`} style={{ fontFamily: "var(--font-display)" }}>
-              Aunty Sala
+            <span className={`text-xl font-bold tracking-tight transition-colors ${!scrolled && page === "home" ? "text-white" : "text-[var(--brand-foreground)]"}`} style={{ fontFamily: "var(--font-display)" }}>
+              {brandShortName}
             </span>
-            <span className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>
-              Fashion Gh
+            <span className="text-[10px] tracking-[0.25em] uppercase text-[var(--brand-accent)] font-medium" style={{ fontFamily: "var(--font-body)" }}>
+              {clientConfig.nameSuffix}
             </span>
           </span>
         </button>
@@ -351,7 +359,7 @@ function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
         <nav className="hidden md:flex items-center gap-8">
           {links.map(l => (
             <button key={l.page} onClick={() => setPage(l.page)}
-              className={`text-sm tracking-wide transition-colors hover:text-[#C4562A] ${page === l.page ? "text-[#C4562A]" : scrolled || page !== "home" ? "text-[#1A1A18]" : "text-white"}`}
+              className={`text-sm tracking-wide transition-colors hover:text-[var(--brand-primary)] ${page === l.page ? "text-[var(--brand-primary)]" : scrolled || page !== "home" ? "text-[var(--brand-foreground)]" : "text-white"}`}
               style={{ fontFamily: "var(--font-body)" }}>
               {l.label}
             </button>
@@ -359,13 +367,13 @@ function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
         </nav>
 
         <div className="flex items-center gap-4">
-          <button onClick={() => setPage("account")} className={`hidden md:flex items-center gap-1.5 p-2 text-sm font-semibold hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label={isAuthenticated ? "Account" : "Login"}>
+          <button onClick={() => setPage("account")} className={`hidden md:flex items-center gap-1.5 p-2 text-sm font-semibold hover:text-[var(--brand-primary)] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label={isAuthenticated ? "Account" : "Login"}>
             {isAuthenticated ? <User size={20} /> : "Login"}
           </button>
-          <button onClick={() => setPage("cart")} className={`relative p-2 hover:text-[#C4562A] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label="Cart">
+          <button onClick={() => setPage("cart")} className={`relative p-2 hover:text-[var(--brand-primary)] transition-colors ${!scrolled && page === "home" ? "text-white" : ""}`} aria-label="Cart">
             <ShoppingCart size={20} />
             {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-[#C4562A] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-[var(--brand-primary)] text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {cartCount}
               </span>
             )}
@@ -377,17 +385,17 @@ function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
       </div>
 
       {open && (
-        <div className="md:hidden bg-[#FAF7F2] border-t border-border px-6 py-4 flex flex-col gap-3">
+        <div className="md:hidden bg-[var(--brand-background)] border-t border-border px-6 py-4 flex flex-col gap-3">
           {links.map(l => (
             <button key={l.page} onClick={() => { setPage(l.page); setOpen(false); }}
-              className="text-left py-2 text-base font-medium hover:text-[#C4562A] transition-colors"
+              className="text-left py-2 text-base font-medium hover:text-[var(--brand-primary)] transition-colors"
               style={{ fontFamily: "var(--font-body)" }}>
               {l.label}
             </button>
           ))}
           <hr className="border-border my-1" />
           <button onClick={() => { setPage("account"); setOpen(false); }}
-            className="text-left py-2 text-base font-medium hover:text-[#C4562A]">{isAuthenticated ? "My Account" : "Login"}</button>
+            className="text-left py-2 text-base font-medium hover:text-[var(--brand-primary)]">{isAuthenticated ? "My Account" : "Login"}</button>
         </div>
       )}
     </header>
@@ -398,9 +406,9 @@ function CustomerNav({ page, setPage, cartCount, isAuthenticated }:
 function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
   const { settings } = useStoreContent();
   const instagram = getInstagramProfile(settings);
-  const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
-  const phone = settingString(settings, "store_phone");
-  const storeEmail = settingString(settings, "store_email");
+  const whatsappUrl = getWhatsAppUrl(settings, `Hello ${brandName}, I would like to make an enquiry.`);
+  const phone = settingString(settings, "store_phone") || clientConfig.contact.phone;
+  const storeEmail = settingString(settings, "store_email") || clientConfig.contact.email;
   const socialLinks = [
     instagram && {
       label: `Instagram ${instagram.label}`,
@@ -408,9 +416,9 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
       icon: Instagram,
       external: true,
     },
-    {
-      label: "TikTok @auntsala.big.bran",
-      href: "https://www.tiktok.com/@auntsala.big.bran",
+    clientConfig.social.tiktok && {
+      label: `${brandName} on TikTok`,
+      href: clientConfig.social.tiktok,
       icon: Music2,
       external: true,
     },
@@ -448,60 +456,60 @@ function CustomerFooter({ setPage }: { setPage: (p: string) => void }) {
     { label: "FAQs", page: "help-faqs" },
   ];
   return (
-    <footer className="bg-[#1A1A18] text-[#FAF7F2]">
+    <footer className="bg-[var(--brand-foreground)] text-[var(--brand-background)]">
       <KenteStripe />
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16 grid grid-cols-1 md:grid-cols-4 gap-10">
         <div className="md:col-span-1">
           <button type="button" onClick={() => setPage("home")} className="mb-4 flex items-center gap-3 text-left" aria-label="Go to homepage">
-            <img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh logo" className="h-20 w-auto object-contain" />
+            <img src={clientConfig.assets.logo} alt={`${brandName} logo`} className="h-20 w-auto object-contain" />
             <div>
-              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala</p>
-              <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium" style={{ fontFamily: "var(--font-body)" }}>Fashion Gh</p>
+              <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>{brandShortName}</p>
+              <p className="text-[10px] tracking-[0.25em] uppercase text-[var(--brand-accent)] font-medium" style={{ fontFamily: "var(--font-body)" }}>{clientConfig.nameSuffix}</p>
             </div>
           </button>
-          <p className="text-sm text-[#FAF7F2]/60 leading-relaxed mt-3">
+          <p className="text-sm text-[var(--brand-background)]/60 leading-relaxed mt-3">
             Made-to-order dresses and ready-to-wear pieces blending contemporary silhouettes with the finest African print fabrics.
           </p>
         </div>
 
         <div>
-          <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Shop</p>
+          <p className="text-xs tracking-widest uppercase text-[var(--brand-accent)] mb-5 font-semibold">Shop</p>
           {shopLinks.map(({ label, page }) => (
             <button key={label} type="button" onClick={() => setPage(page)}
-              className="block text-sm text-[#FAF7F2]/60 hover:text-[#FAF7F2] mb-2.5 transition-colors text-left">{label}</button>
+              className="block text-sm text-[var(--brand-background)]/60 hover:text-[var(--brand-background)] mb-2.5 transition-colors text-left">{label}</button>
           ))}
         </div>
 
         <div>
-          <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Help</p>
+          <p className="text-xs tracking-widest uppercase text-[var(--brand-accent)] mb-5 font-semibold">Help</p>
           {helpLinks.map(({ label, page }) => (
             <button key={label} type="button" onClick={() => setPage(page)}
-              className="block text-sm text-[#FAF7F2]/60 hover:text-[#FAF7F2] mb-2.5 transition-colors text-left">{label}</button>
+              className="block text-sm text-[var(--brand-background)]/60 hover:text-[var(--brand-background)] mb-2.5 transition-colors text-left">{label}</button>
           ))}
         </div>
 
         <div>
-          <p className="text-xs tracking-widest uppercase text-[#B8922A] mb-5 font-semibold">Follow Us</p>
-          <p className="text-sm text-[#FAF7F2]/60 mb-4 leading-relaxed">Follow our latest pieces and speak directly with the Aunty Sala team.</p>
+          <p className="text-xs tracking-widest uppercase text-[var(--brand-accent)] mb-5 font-semibold">Follow Us</p>
+          <p className="text-sm text-[var(--brand-background)]/60 mb-4 leading-relaxed">Follow our latest pieces and speak directly with the {brandShortName} team.</p>
           <div className="flex flex-wrap items-center gap-3">
             {socialLinks.map(({ label, href, icon: Icon, external }) => (
               <a key={label} href={href} aria-label={label} title={label}
                 target={external ? "_blank" : undefined} rel={external ? "noreferrer" : undefined}
-                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-[#FAF7F2] hover:border-[#B8922A] hover:bg-[#B8922A] hover:text-[#1A1A18] transition-colors">
+                className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 text-[var(--brand-background)] hover:border-[var(--brand-accent)] hover:bg-[var(--brand-accent)] hover:text-[var(--brand-foreground)] transition-colors">
                 <Icon size={17} />
               </a>
             ))}
-            {socialLinks.length === 0 && <p className="text-sm text-[#FAF7F2]/50">Social links will appear here once added in store settings.</p>}
+            {socialLinks.length === 0 && <p className="text-sm text-[var(--brand-background)]/50">Social links will appear here once added in store settings.</p>}
           </div>
         </div>
       </div>
-      <div className="border-t border-white/10 max-w-7xl mx-auto px-6 lg:px-10 py-5 flex flex-col lg:flex-row justify-between items-center gap-3 text-xs text-[#FAF7F2]/40">
-        <p>© {new Date().getFullYear()} Aunty Sala Fashion Gh. All rights reserved.</p>
+      <div className="border-t border-white/10 max-w-7xl mx-auto px-6 lg:px-10 py-5 flex flex-col lg:flex-row justify-between items-center gap-3 text-xs text-[var(--brand-background)]/40">
+        <p>© {new Date().getFullYear()} {clientConfig.legalName}. All rights reserved.</p>
         <div className="flex items-center gap-4">
-          <button type="button" onClick={() => setPage("privacy-policy")} className="hover:text-[#FAF7F2] transition-colors">Privacy Policy</button>
-          <button type="button" onClick={() => setPage("terms-of-service")} className="hover:text-[#FAF7F2] transition-colors">Terms of Service</button>
+          <button type="button" onClick={() => setPage("privacy-policy")} className="hover:text-[var(--brand-background)] transition-colors">Privacy Policy</button>
+          <button type="button" onClick={() => setPage("terms-of-service")} className="hover:text-[var(--brand-background)] transition-colors">Terms of Service</button>
         </div>
-        <p>Designed & crafted in Accra, Ghana 🇬🇭</p>
+        <p>Designed &amp; crafted in {clientConfig.city}, {clientConfig.countryName}</p>
       </div>
     </footer>
   );
@@ -525,32 +533,32 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
     <div className="min-h-screen" style={{ fontFamily: "var(--font-body)" }}>
       {/* Hero */}
       <section className="relative flex h-[100svh] min-h-[660px] max-h-[820px] items-end overflow-hidden bg-[#2A1810] md:h-[92vh] md:min-h-[600px] md:max-h-none">
-        <ManagedImage src={siteMedia.home_hero} alt="Aunty Sala Fashion Gh collection"
+        <ManagedImage src={siteMedia.home_hero || clientConfig.assets.heroFallback} alt={`${brandName} collection`}
           onLoad={() => setHeroLoaded(true)}
           className={`absolute inset-0 h-full w-full object-cover object-[82%_center] transition-opacity duration-700 md:object-top ${heroLoaded ? "opacity-90" : "opacity-0"}`} />
         <div className="absolute inset-0 bg-gradient-to-t from-[#160B06] via-[#160B06]/35 to-black/10 md:bg-gradient-to-r md:from-[#1A0E08]/80 md:via-[#1A0E08]/40 md:to-transparent" />
         <div className="relative z-10 mx-auto w-full max-w-7xl px-5 pb-10 sm:px-6 sm:pb-14 lg:px-10 lg:pb-20">
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#D1A938] sm:text-xs md:mb-4 md:tracking-[0.22em]">
-            <span className="md:hidden">Aunty Sala Fashion Gh</span>
-            <span className="hidden md:inline">Aunty Sala Fashion Gh — Official Online Fashion Store</span>
+            <span className="md:hidden">{brandName}</span>
+            <span className="hidden md:inline">{brandName} — Official Online Fashion Store</span>
           </p>
           <h1 className="mb-4 max-w-[20rem] text-[clamp(2.8rem,13vw,4rem)] font-bold leading-[0.92] text-white sm:max-w-xl sm:text-6xl md:mb-6 md:max-w-4xl md:text-6xl md:leading-none lg:text-7xl" style={{ fontFamily: "var(--font-display)" }}>
-            Your Inner Diva<span className="text-[#C4562A] md:text-white">.</span>
-            <em className="hidden not-italic text-[#C4562A] md:inline"><br />Everything Fashionable.</em>
+            Your Inner Diva<span className="text-[var(--brand-primary)] md:text-white">.</span>
+            <em className="hidden not-italic text-[var(--brand-primary)] md:inline"><br />Everything Fashionable.</em>
           </h1>
           <p className="mb-6 max-w-[17rem] text-sm leading-relaxed text-white/75 sm:max-w-sm md:mb-8 md:text-lg">
-            <span className="md:hidden">Contemporary Ghanaian fashion, made for you.</span>
-            <span className="hidden md:inline">Made-to-measure dresses woven from the finest kente, ankara &amp; batik — crafted in Accra, for women everywhere.</span>
+            <span className="md:hidden">{clientConfig.description}</span>
+            <span className="hidden md:inline">{clientConfig.description}</span>
           </p>
           <div className="grid max-w-sm grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:gap-4">
             <button onClick={() => setPage("shop")}
-              className="flex items-center justify-center gap-2 rounded bg-[#C4562A] px-4 py-3 text-xs font-semibold tracking-wide text-white transition-colors hover:bg-[#A8411B] sm:px-8 sm:py-3.5 sm:text-sm">
+              className="flex items-center justify-center gap-2 rounded bg-[var(--brand-primary)] px-4 py-3 text-xs font-semibold tracking-wide text-white transition-colors hover:bg-[var(--brand-primary-hover)] sm:px-8 sm:py-3.5 sm:text-sm">
               Shop Now <ArrowRight size={16} />
             </button>
-            <button onClick={() => setPage("custom")}
+            {clientConfig.features.customOrders && <button onClick={() => setPage("custom")}
               className="rounded border border-white/50 px-4 py-3 text-xs font-semibold tracking-wide text-white transition-colors hover:border-white sm:px-8 sm:py-3.5 sm:text-sm">
               Custom Order
-            </button>
+            </button>}
           </div>
         </div>
         <div className="absolute right-8 bottom-8 hidden lg:flex flex-col items-center gap-2">
@@ -562,14 +570,14 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
       <KenteStripe />
 
       {/* Store purpose */}
-      <section className="bg-[#FAF7F2] px-6 lg:px-10 py-14" aria-labelledby="store-purpose-heading">
+      <section className="bg-[var(--brand-background)] px-6 lg:px-10 py-14" aria-labelledby="store-purpose-heading">
         <div className="max-w-5xl mx-auto text-center">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">About This Store</p>
+          <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">About This Store</p>
           <h2 id="store-purpose-heading" className="text-3xl md:text-4xl font-bold mb-5" style={{ fontFamily: "var(--font-display)" }}>
-            Ghanaian fashion, made personal
+            Fashion, made personal
           </h2>
           <p className="max-w-3xl mx-auto text-muted-foreground leading-relaxed">
-            Aunty Sala Fashion Gh is an online fashion store for discovering ready-to-wear pieces, requesting made-to-measure dresses, saving favourites, placing secure orders, and tracking each order from creation to delivery.
+            {brandName} is an online fashion store for discovering ready-to-wear pieces, requesting made-to-measure designs, saving favourites, placing secure orders, and tracking each order from creation to delivery.
           </p>
         </div>
       </section>
@@ -578,10 +586,10 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
       <section className="py-20 px-6 lg:px-10 max-w-7xl mx-auto">
         <div className="flex items-end justify-between mb-12">
           <div>
-            <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Curated for You</p>
+            <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Curated for You</p>
             <h2 className="text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Featured Pieces</h2>
           </div>
-          <button onClick={() => setPage("shop")} className="hidden sm:flex items-center gap-2 text-sm font-semibold text-[#C4562A] hover:gap-3 transition-all">
+          <button onClick={() => setPage("shop")} className="hidden sm:flex items-center gap-2 text-sm font-semibold text-[var(--brand-primary)] hover:gap-3 transition-all">
             View All <ArrowRight size={16} />
           </button>
         </div>
@@ -589,24 +597,24 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {featured.map(p => (
             <div key={p.id} className="group text-left bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-              <div className="relative overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}
+              <div className="relative overflow-hidden bg-[var(--brand-muted)]" style={{ aspectRatio: "3/4" }}
                 onClick={() => setPage(`product-${p.slug}`)}>
                 <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 {p.badge && (
-                  <span className="absolute top-3 left-3 bg-[#C4562A] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">
+                  <span className="absolute top-3 left-3 bg-[var(--brand-primary)] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">
                     {p.badge}
                   </span>
                 )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                 <button onClick={e => { e.stopPropagation(); addToCart(p); }}
-                  className="absolute bottom-3 left-3 right-3 bg-white/95 hover:bg-[#C4562A] hover:text-white text-[#1A1A18] text-xs font-semibold py-2.5 rounded opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                  className="absolute bottom-3 left-3 right-3 bg-white/95 hover:bg-[var(--brand-primary)] hover:text-white text-[var(--brand-foreground)] text-xs font-semibold py-2.5 rounded opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
                   Add to Cart
                 </button>
               </div>
               <div className="p-4" onClick={() => setPage(`product-${p.slug}`)}>
-                <p className="text-xs text-[#B8922A] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
+                <p className="text-xs text-[var(--brand-accent)] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
                 <p className="font-semibold text-sm mb-1" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
-                <p className="text-[#C4562A] font-bold text-sm">{ghs(p.price)}</p>
+                <p className="text-[var(--brand-primary)] font-bold text-sm">{ghs(p.price)}</p>
               </div>
             </div>
           ))}
@@ -614,15 +622,15 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
       </section>
 
       {/* Custom Order Banner */}
-      <section className="relative overflow-hidden bg-[#1A1A18] mx-6 lg:mx-10 rounded-2xl mb-20">
+      {clientConfig.features.customOrders && <section className="relative overflow-hidden bg-[var(--brand-foreground)] mx-6 lg:mx-10 rounded-2xl mb-20">
         <div className="absolute inset-0">
           <ManagedImage src={siteMedia.home_custom_banner} alt="Custom fashion fabric" className="w-full h-full object-cover opacity-20" />
         </div>
         <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8 px-10 py-14">
           <div>
-            <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">Bespoke Service</p>
+            <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">Bespoke Service</p>
             <h2 className="text-white text-4xl font-bold mb-4 max-w-md" style={{ fontFamily: "var(--font-display)" }}>
-              Your Dream Dress,<br /><em className="not-italic text-[#C4562A]">Made for You.</em>
+              Your Dream Dress,<br /><em className="not-italic text-[var(--brand-primary)]">Made for You.</em>
             </h2>
             <p className="text-white/60 max-w-sm leading-relaxed">
               Share your measurements, choose your fabric, and let our master seamstresses craft a one-of-a-kind piece. Delivered in 2–4 weeks.
@@ -631,31 +639,31 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           <div className="flex flex-col gap-4 min-w-[200px]">
             {["Choose Your Fabric","Share Measurements","We Craft It","Delivered"].map((step, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full border-2 border-[#B8922A] text-[#B8922A] text-xs font-bold flex items-center justify-center shrink-0">{i+1}</div>
+                <div className="w-7 h-7 rounded-full border-2 border-[var(--brand-accent)] text-[var(--brand-accent)] text-xs font-bold flex items-center justify-center shrink-0">{i+1}</div>
                 <span className="text-white/80 text-sm">{step}</span>
               </div>
             ))}
             <button onClick={() => setPage("custom")}
-              className="mt-2 bg-[#C4562A] hover:bg-[#A8411B] text-white px-6 py-3 text-sm font-semibold rounded transition-colors flex items-center justify-center gap-2">
+              className="mt-2 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white px-6 py-3 text-sm font-semibold rounded transition-colors flex items-center justify-center gap-2">
               Start Custom Order <Scissors size={15} />
             </button>
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* Testimonials */}
-      <section className="py-20 px-6 lg:px-10 max-w-7xl mx-auto">
+      {clientConfig.features.testimonials && testimonials.length > 0 && <section className="py-20 px-6 lg:px-10 max-w-7xl mx-auto">
         <div className="flex items-end justify-between gap-6 mb-12">
           <div>
-            <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">What Our Clients Say</p>
+            <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">What Our Clients Say</p>
             <h2 className="text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Worn &amp; Loved</h2>
           </div>
           {testimonials.length > 1 && (
             <div className="flex items-center gap-2" aria-label="Testimonial controls">
-              <button type="button" onClick={() => scrollTestimonials(-1)} aria-label="Previous testimonials" className="w-10 h-10 rounded-full border border-border bg-card flex items-center justify-center hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">
+              <button type="button" onClick={() => scrollTestimonials(-1)} aria-label="Previous testimonials" className="w-10 h-10 rounded-full border border-border bg-card flex items-center justify-center hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors">
                 <ChevronLeft size={18} />
               </button>
-              <button type="button" onClick={() => scrollTestimonials(1)} aria-label="Next testimonials" className="w-10 h-10 rounded-full border border-border bg-card flex items-center justify-center hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">
+              <button type="button" onClick={() => scrollTestimonials(1)} aria-label="Next testimonials" className="w-10 h-10 rounded-full border border-border bg-card flex items-center justify-center hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors">
                 <ChevronRight size={18} />
               </button>
             </div>
@@ -665,7 +673,7 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           {testimonials.map((t) => (
             <article key={t.id} className="min-w-[85%] sm:min-w-[360px] lg:min-w-[calc(33.333%-1rem)] snap-start bg-card rounded-xl p-7 shadow-sm border border-border/50 flex flex-col">
               <StarRating rating={t.rating} />
-              <p className="text-sm leading-relaxed text-[#1A1A18]/80 mt-4 mb-5 italic" style={{ fontFamily: "var(--font-display)" }}>
+              <p className="text-sm leading-relaxed text-[var(--brand-foreground)]/80 mt-4 mb-5 italic" style={{ fontFamily: "var(--font-display)" }}>
                 &ldquo;{t.text}&rdquo;
               </p>
               <div className="mt-auto">
@@ -675,20 +683,20 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
             </article>
           ))}
         </div>
-      </section>
+      </section>}
 
       {/* Instagram Gallery Strip */}
-      <section className="pb-20 px-6 lg:px-10 max-w-7xl mx-auto">
+      {clientConfig.features.gallery && gallery.length > 0 && <section className="pb-20 px-6 lg:px-10 max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <Instagram size={18} className="text-[#C4562A]" />
+            <Instagram size={18} className="text-[var(--brand-primary)]" />
             <p className="font-semibold text-sm">{instagram?.label ?? "Instagram"}</p>
           </div>
-          {instagram && <a href={instagram.href} target="_blank" rel="noreferrer" className="text-xs text-[#C4562A] font-semibold hover:underline">Follow us on Instagram</a>}
+          {instagram && <a href={instagram.href} target="_blank" rel="noreferrer" className="text-xs text-[var(--brand-primary)] font-semibold hover:underline">Follow us on Instagram</a>}
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
           {gallery.map((item) => (
-            <div key={item.id} className="relative overflow-hidden rounded-xl bg-[#E8E2D9] group shadow-sm" style={{ aspectRatio: "3 / 4" }}>
+            <div key={item.id} className="relative overflow-hidden rounded-xl bg-[var(--brand-muted)] group shadow-sm" style={{ aspectRatio: "3 / 4" }}>
               <img
                 src={item.imageUrl}
                 alt={item.altText}
@@ -702,7 +710,7 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
             </div>
           ))}
         </div>
-      </section>
+      </section>}
 
       {/* Values Strip */}
       <section className="bg-[#F0EAE0] py-12">
@@ -714,8 +722,8 @@ function HomePage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
             { icon: MessageCircle, label: "WhatsApp Support", sub: "Direct line to our team, always" },
           ].map(({ icon: Icon, label, sub }) => (
             <div key={label} className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-[#C4562A]/10 rounded-lg flex items-center justify-center shrink-0">
-                <Icon size={18} className="text-[#C4562A]" />
+              <div className="w-10 h-10 bg-[var(--brand-primary)]/10 rounded-lg flex items-center justify-center shrink-0">
+                <Icon size={18} className="text-[var(--brand-primary)]" />
               </div>
               <div>
                 <p className="font-semibold text-sm mb-0.5">{label}</p>
@@ -848,10 +856,10 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
   return (
     <div className="min-h-screen pt-16" style={{ fontFamily: "var(--font-body)" }}>
       {/* Page Header */}
-      <div className="bg-[#1A1A18] min-h-[280px] md:min-h-[360px] px-6 lg:px-10 text-center relative overflow-hidden flex items-center justify-center">
+      <div className="bg-[var(--brand-foreground)] min-h-[280px] md:min-h-[360px] px-6 lg:px-10 text-center relative overflow-hidden flex items-center justify-center">
         <ManagedImage src={siteMedia.shop_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
         <div className="relative z-10">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Our Collection</p>
+          <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Our Collection</p>
           <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Shop All Pieces</h1>
         </div>
       </div>
@@ -863,33 +871,33 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           <div className="relative flex-1 min-w-[200px] max-w-xs">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search pieces..." className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm bg-card focus:outline-none focus:border-[#C4562A]" />
+              placeholder="Search pieces..." className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]" />
           </div>
 
           <div className="flex gap-2 flex-wrap">
             {categories.map(c => (
               <button key={c} onClick={() => setCategory(c)}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${category === c ? "bg-[#C4562A] text-white border-[#C4562A]" : "border-border hover:border-[#C4562A] text-[#1A1A18]"}`}>
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${category === c ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-border hover:border-[var(--brand-primary)] text-[var(--brand-foreground)]"}`}>
                 {c}
               </button>
             ))}
           </div>
 
           <select value={fabric} onChange={e => setFabric(e.target.value)}
-            className="border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+            className="border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]">
             {fabrics.map(f => <option key={f} value={f}>{f === "All" ? "All Fabrics" : f}</option>)}
           </select>
 
           <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-            className="border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+            className="border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]">
             <option value="featured">Featured</option>
             <option value="price-asc">Price: Low–High</option>
             <option value="price-desc">Price: High–Low</option>
           </select>
 
           <div className="ml-auto flex gap-1">
-            <button onClick={() => setView("grid")} className={`p-2 rounded ${view === "grid" ? "bg-[#C4562A] text-white" : "hover:bg-muted"}`}><LayoutGrid size={16}/></button>
-            <button onClick={() => setView("list")} className={`p-2 rounded ${view === "list" ? "bg-[#C4562A] text-white" : "hover:bg-muted"}`}><LayoutList size={16}/></button>
+            <button onClick={() => setView("grid")} className={`p-2 rounded ${view === "grid" ? "bg-[var(--brand-primary)] text-white" : "hover:bg-muted"}`}><LayoutGrid size={16}/></button>
+            <button onClick={() => setView("list")} className={`p-2 rounded ${view === "list" ? "bg-[var(--brand-primary)] text-white" : "hover:bg-muted"}`}><LayoutList size={16}/></button>
           </div>
         </div>
 
@@ -903,28 +911,28 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {shopProducts.map(p => (
               <div key={p.id} className="group bg-card rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow border border-border/40 [content-visibility:auto] [contain-intrinsic-size:480px]">
-                <div className="relative overflow-hidden bg-[#E8E2D9] cursor-pointer" style={{ aspectRatio: "3/4" }}
+                <div className="relative overflow-hidden bg-[var(--brand-muted)] cursor-pointer" style={{ aspectRatio: "3/4" }}
                   onClick={() => setPage(`product-${p.slug}`)}>
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                  {p.badge && <span className="absolute top-3 left-3 bg-[#C4562A] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">{p.badge}</span>}
+                  {p.badge && <span className="absolute top-3 left-3 bg-[var(--brand-primary)] text-white text-[10px] font-bold tracking-widest uppercase px-2.5 py-1 rounded">{p.badge}</span>}
                   {!p.inStock && <div className="absolute inset-0 bg-black/40 flex items-center justify-center"><span className="bg-white text-xs font-bold px-3 py-1 rounded">Out of Stock</span></div>}
-                  <button disabled={wishlistPending.includes(p.id)} onClick={e => { e.stopPropagation(); void handleWishlist(p.id); }}
+                  {clientConfig.features.wishlist && <button disabled={wishlistPending.includes(p.id)} onClick={e => { e.stopPropagation(); void handleWishlist(p.id); }}
                     aria-label={wishlist.includes(p.id) ? `Remove ${p.name} from wishlist` : `Add ${p.name} to wishlist`}
                     className="absolute top-3 right-3 w-8 h-8 bg-white disabled:opacity-50 rounded-full flex items-center justify-center shadow opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity">
-                    <Heart size={14} className={wishlist.includes(p.id) ? "fill-[#C4562A] text-[#C4562A]" : "text-[#1A1A18]"} />
-                  </button>
+                    <Heart size={14} className={wishlist.includes(p.id) ? "fill-[var(--brand-primary)] text-[var(--brand-primary)]" : "text-[var(--brand-foreground)]"} />
+                  </button>}
                   {p.inStock && (
                     <button onClick={e => { e.stopPropagation(); addToCart(p); }}
-                      className="absolute bottom-3 left-3 right-3 bg-white/95 hover:bg-[#C4562A] hover:text-white text-[#1A1A18] text-xs font-semibold py-2.5 rounded opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
+                      className="absolute bottom-3 left-3 right-3 bg-white/95 hover:bg-[var(--brand-primary)] hover:text-white text-[var(--brand-foreground)] text-xs font-semibold py-2.5 rounded opacity-0 group-hover:opacity-100 transition-all translate-y-2 group-hover:translate-y-0">
                       Add to Cart
                     </button>
                   )}
                 </div>
                 <div className="p-4" onClick={() => setPage(`product-${p.slug}`)} role="button">
-                  <p className="text-xs text-[#B8922A] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
+                  <p className="text-xs text-[var(--brand-accent)] uppercase tracking-widest mb-1 font-semibold">{p.fabric}</p>
                   <p className="font-semibold text-sm mb-1" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
                   <div className="flex items-center gap-2">
-                    <span className="text-[#C4562A] font-bold text-sm">{ghs(p.price)}</span>
+                    <span className="text-[var(--brand-primary)] font-bold text-sm">{ghs(p.price)}</span>
                     {p.originalPrice && <span className="text-muted-foreground text-xs line-through">{ghs(p.originalPrice)}</span>}
                   </div>
                 </div>
@@ -936,25 +944,25 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
             {shopProducts.map(p => (
               <div key={p.id} className="bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 flex gap-5 p-4 cursor-pointer hover:shadow-md transition-shadow [content-visibility:auto] [contain-intrinsic-size:144px]"
                 onClick={() => setPage(`product-${p.slug}`)}>
-                <div className="w-24 h-28 rounded-lg overflow-hidden bg-[#E8E2D9] shrink-0">
+                <div className="w-24 h-28 rounded-lg overflow-hidden bg-[var(--brand-muted)] shrink-0">
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs text-[#B8922A] uppercase tracking-widest font-semibold">{p.fabric} · {p.category}</p>
+                  <p className="text-xs text-[var(--brand-accent)] uppercase tracking-widest font-semibold">{p.fabric} · {p.category}</p>
                   <p className="font-bold text-base mt-0.5" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
                   <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{p.description}</p>
                   <div className="flex items-center gap-4 mt-3">
-                    <span className="text-[#C4562A] font-bold">{ghs(p.price)}</span>
+                    <span className="text-[var(--brand-primary)] font-bold">{ghs(p.price)}</span>
                     <span className="text-xs text-muted-foreground">{p.sizes.join(" · ")}</span>
                   </div>
                 </div>
                 <div className="self-center shrink-0 flex items-center gap-2">
-                  <button disabled={wishlistPending.includes(p.id)} onClick={e => { e.stopPropagation(); void handleWishlist(p.id); }} aria-label={wishlist.includes(p.id) ? `Remove ${p.name} from wishlist` : `Add ${p.name} to wishlist`} className="p-2.5 border border-border rounded hover:border-[#C4562A] disabled:opacity-50">
-                    <Heart size={15} className={wishlist.includes(p.id) ? "fill-[#C4562A] text-[#C4562A]" : ""} />
-                  </button>
+                  {clientConfig.features.wishlist && <button disabled={wishlistPending.includes(p.id)} onClick={e => { e.stopPropagation(); void handleWishlist(p.id); }} aria-label={wishlist.includes(p.id) ? `Remove ${p.name} from wishlist` : `Add ${p.name} to wishlist`} className="p-2.5 border border-border rounded hover:border-[var(--brand-primary)] disabled:opacity-50">
+                    <Heart size={15} className={wishlist.includes(p.id) ? "fill-[var(--brand-primary)] text-[var(--brand-primary)]" : ""} />
+                  </button>}
                   <button onClick={e => { e.stopPropagation(); if (p.inStock) addToCart(p); }}
                     disabled={!p.inStock}
-                    className="bg-[#C4562A] disabled:opacity-40 hover:bg-[#A8411B] text-white text-xs font-semibold px-4 py-2.5 rounded transition-colors">
+                    className="bg-[var(--brand-primary)] disabled:opacity-40 hover:bg-[var(--brand-primary-hover)] text-white text-xs font-semibold px-4 py-2.5 rounded transition-colors">
                     {p.inStock ? "Add" : "OOS"}
                   </button>
                 </div>
@@ -967,7 +975,7 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
           <div className="text-center py-20 text-muted-foreground">
             <Package size={40} className="mx-auto mb-4 opacity-30" />
             <p className="text-lg font-semibold">No pieces match your filters</p>
-            <button onClick={() => { setCategory("All"); setFabric("All"); setSearch(""); }} className="mt-3 text-[#C4562A] text-sm font-semibold hover:underline">Clear filters</button>
+            <button onClick={() => { setCategory("All"); setFabric("All"); setSearch(""); }} className="mt-3 text-[var(--brand-primary)] text-sm font-semibold hover:underline">Clear filters</button>
           </div>
         )}
 
@@ -976,7 +984,7 @@ function ShopPage({ setPage, addToCart }: { setPage: (p: string) => void; addToC
             {loadingMore ? (
               <FashionLoader compact label="Tailoring more pieces…" />
             ) : hasMore ? (
-              <button type="button" onClick={() => void loadMoreProducts()} className="border border-border rounded-lg px-5 py-2.5 text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">Load more pieces</button>
+              <button type="button" onClick={() => void loadMoreProducts()} className="border border-border rounded-lg px-5 py-2.5 text-sm font-semibold hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors">Load more pieces</button>
             ) : (
               <p className="text-xs text-muted-foreground">You’ve seen the full collection.</p>
             )}
@@ -1062,11 +1070,11 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-10">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-8">
-          <button onClick={() => setPage("shop")} className="hover:text-[#C4562A]">Shop</button>
+          <button onClick={() => setPage("shop")} className="hover:text-[var(--brand-primary)]">Shop</button>
           <ChevronRight size={12} />
           <span>{product.category}</span>
           <ChevronRight size={12} />
-          <span className="text-[#1A1A18]">{product.name}</span>
+          <span className="text-[var(--brand-foreground)]">{product.name}</span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
@@ -1075,14 +1083,14 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
             <div className="flex flex-col gap-2 w-16 shrink-0">
               {product.images.map((img, i) => (
                 <button key={i} onClick={() => setImgIdx(i)}
-                  className={`w-16 h-20 rounded-lg overflow-hidden border-2 transition-colors ${imgIdx === i ? "border-[#C4562A]" : "border-transparent"}`}>
+                  className={`w-16 h-20 rounded-lg overflow-hidden border-2 transition-colors ${imgIdx === i ? "border-[var(--brand-primary)]" : "border-transparent"}`}>
                   <img src={img} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
-            <div className="flex-1 relative rounded-2xl overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}>
+            <div className="flex-1 relative rounded-2xl overflow-hidden bg-[var(--brand-muted)]" style={{ aspectRatio: "3/4" }}>
               <img src={product.images[imgIdx]} alt={product.name} className="w-full h-full object-cover" />
-              {product.badge && <span className="absolute top-4 left-4 bg-[#C4562A] text-white text-xs font-bold tracking-widest uppercase px-3 py-1.5 rounded">{product.badge}</span>}
+              {product.badge && <span className="absolute top-4 left-4 bg-[var(--brand-primary)] text-white text-xs font-bold tracking-widest uppercase px-3 py-1.5 rounded">{product.badge}</span>}
               <button onClick={() => setImgIdx(i => (i - 1 + product.images.length) % product.images.length)}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 bg-white/90 rounded-full flex items-center justify-center shadow hover:bg-white">
                 <ChevronLeft size={18} />
@@ -1096,10 +1104,10 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
 
           {/* Info */}
           <div>
-            <p className="text-[#B8922A] text-xs tracking-widest uppercase font-bold mb-2">{product.fabric} · {product.category}</p>
+            <p className="text-[var(--brand-accent)] text-xs tracking-widest uppercase font-bold mb-2">{product.fabric} · {product.category}</p>
             <h1 className="text-3xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>{product.name}</h1>
             <div className="flex items-baseline gap-3 mb-6">
-              <span className="text-3xl font-bold text-[#C4562A]">{ghs(product.price)}</span>
+              <span className="text-3xl font-bold text-[var(--brand-primary)]">{ghs(product.price)}</span>
               {product.originalPrice && <span className="text-muted-foreground line-through text-lg">{ghs(product.originalPrice)}</span>}
             </div>
 
@@ -1118,7 +1126,7 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
               <div className="flex gap-2">
                 {product.colors.map((c, i) => (
                   <button key={i} title={c}
-                    className="w-7 h-7 rounded-full border-2 border-offset-1 hover:scale-110 transition-transform border-border hover:border-[#B8922A]"
+                    className="w-7 h-7 rounded-full border-2 border-offset-1 hover:scale-110 transition-transform border-border hover:border-[var(--brand-accent)]"
                     style={{ backgroundColor: c }} />
                 ))}
               </div>
@@ -1128,7 +1136,7 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
             <div className="mb-6">
               <div className="flex justify-between mb-2">
                 <p className="text-sm font-semibold">Size</p>
-                <button onClick={() => setShowSizeGuide((current) => !current)} className="text-xs text-[#C4562A] hover:underline">Size Guide</button>
+                <button onClick={() => setShowSizeGuide((current) => !current)} className="text-xs text-[var(--brand-primary)] hover:underline">Size Guide</button>
               </div>
               {showSizeGuide && <div className="mb-3 overflow-x-auto rounded-lg border border-border bg-muted/30 p-3">
                 <table className="w-full text-xs"><thead><tr>{["Size","Bust","Waist","Hips"].map((heading) => <th key={heading} className="px-2 py-1.5 text-left">{heading}</th>)}</tr></thead><tbody>
@@ -1138,7 +1146,7 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
               <div className="flex flex-wrap gap-2">
                 {product.sizes.map(s => (
                   <button key={s} onClick={() => setSize(s)}
-                    className={`w-12 h-10 text-sm rounded-lg border-2 font-semibold transition-colors ${size === s ? "border-[#C4562A] bg-[#C4562A] text-white" : "border-border hover:border-[#C4562A]"}`}>
+                    className={`w-12 h-10 text-sm rounded-lg border-2 font-semibold transition-colors ${size === s ? "border-[var(--brand-primary)] bg-[var(--brand-primary)] text-white" : "border-border hover:border-[var(--brand-primary)]"}`}>
                     {s}
                   </button>
                 ))}
@@ -1153,25 +1161,25 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
                 <button onClick={() => setQty(q => q+1)} className="w-10 h-12 flex items-center justify-center hover:bg-muted transition-colors"><Plus size={14}/></button>
               </div>
               <button onClick={handleAdd} disabled={!product.inStock}
-                className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${added ? "bg-green-600 text-white" : "bg-[#C4562A] hover:bg-[#A8411B] text-white"} disabled:opacity-40`}>
+                className={`flex-1 py-3 rounded-lg font-semibold text-sm transition-all flex items-center justify-center gap-2 ${added ? "bg-green-600 text-white" : "bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white"} disabled:opacity-40`}>
                 {added ? <><Check size={16}/> Added!</> : <><ShoppingCart size={16}/> Add to Cart</>}
               </button>
-              <button disabled={wishlistPending} onClick={() => void handleWishlist()} aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} className="w-12 h-12 border border-border disabled:opacity-50 rounded-lg flex items-center justify-center hover:border-[#C4562A] transition-colors">
-                <Heart size={18} className={wishlist.includes(product.id) ? "fill-[#C4562A] text-[#C4562A]" : ""} />
-              </button>
+              {clientConfig.features.wishlist && <button disabled={wishlistPending} onClick={() => void handleWishlist()} aria-label={wishlist.includes(product.id) ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`} className="w-12 h-12 border border-border disabled:opacity-50 rounded-lg flex items-center justify-center hover:border-[var(--brand-primary)] transition-colors">
+                <Heart size={18} className={wishlist.includes(product.id) ? "fill-[var(--brand-primary)] text-[var(--brand-primary)]" : ""} />
+              </button>}
             </div>
             {wishlistError && <p role="alert" className="mb-4 text-sm text-red-600">{wishlistError}</p>}
 
             <button onClick={() => setPage("custom")}
-              className="w-full border-2 border-[#C4562A] text-[#C4562A] hover:bg-[#C4562A] hover:text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 mb-6">
+              className="w-full border-2 border-[var(--brand-primary)] text-[var(--brand-primary)] hover:bg-[var(--brand-primary)] hover:text-white py-3 rounded-lg font-semibold text-sm transition-colors flex items-center justify-center gap-2 mb-6">
               <Scissors size={15} /> Request Custom Fit
             </button>
 
             {/* Delivery */}
             <div className="flex gap-4 py-4 border-t border-border">
-              {[{ icon: Truck, text: "Free delivery on orders over GH₵ 500" }, { icon: Clock, text: "Made-to-order: 2–4 weeks" }].map(({ icon: Icon, text }) => (
+              {[{ icon: Truck, text: `Free delivery on orders over ${ghs(500)}` }, { icon: Clock, text: "Made-to-order: 2–4 weeks" }].map(({ icon: Icon, text }) => (
                 <div key={text} className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <Icon size={14} className="text-[#B8922A] shrink-0" />
+                  <Icon size={14} className="text-[var(--brand-accent)] shrink-0" />
                   <span>{text}</span>
                 </div>
               ))}
@@ -1182,16 +1190,16 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
               <div className="flex gap-6 mb-5">
                 {["description","fabric-care","reviews"].map(t => (
                   <button key={t} onClick={() => setTab(t)}
-                    className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${tab === t ? "border-[#C4562A] text-[#C4562A]" : "border-transparent text-muted-foreground hover:text-[#1A1A18]"}`}>
+                    className={`text-sm font-semibold pb-2 border-b-2 transition-colors ${tab === t ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-transparent text-muted-foreground hover:text-[var(--brand-foreground)]"}`}>
                     {t === "description" ? "Description" : t === "fabric-care" ? "Fabric Care" : "Reviews"}
                   </button>
                 ))}
               </div>
-              {tab === "description" && <p className="text-sm text-[#1A1A18]/70 leading-relaxed">{product.description}</p>}
+              {tab === "description" && <p className="text-sm text-[var(--brand-foreground)]/70 leading-relaxed">{product.description}</p>}
               {tab === "fabric-care" && (
-                <ul className="text-sm text-[#1A1A18]/70 space-y-2">
+                <ul className="text-sm text-[var(--brand-foreground)]/70 space-y-2">
                   {["Hand wash or gentle machine wash in cold water","Do not tumble dry — hang or lay flat to dry","Iron on low heat, inside out","Dry clean recommended for Kente pieces","Store folded in a cool, dry place"].map(i => (
-                    <li key={i} className="flex items-start gap-2"><Check size={14} className="text-[#B8922A] mt-0.5 shrink-0"/>{i}</li>
+                    <li key={i} className="flex items-start gap-2"><Check size={14} className="text-[var(--brand-accent)] mt-0.5 shrink-0"/>{i}</li>
                   ))}
                 </ul>
               )}
@@ -1204,7 +1212,7 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
                         <StarRating rating={t.rating} />
                       </div>
                       <p className="text-xs text-muted-foreground mb-1">{t.location}</p>
-                      <p className="text-sm text-[#1A1A18]/70 leading-relaxed">&ldquo;{t.text.slice(0,120)}...&rdquo;</p>
+                      <p className="text-sm text-[var(--brand-foreground)]/70 leading-relaxed">&ldquo;{t.text.slice(0,120)}...&rdquo;</p>
                     </div>
                   ))}
                 </div>
@@ -1220,13 +1228,13 @@ function ProductDetailPage({ productSlug, setPage, addToCart, onProductLoaded }:
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
               {related.map(p => (
                 <button key={p.id} onClick={() => setPage(`product-${p.slug}`)} className="group text-left bg-card rounded-xl overflow-hidden shadow-sm border border-border/40 hover:shadow-md transition-shadow">
-                  <div className="overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}>
+                  <div className="overflow-hidden bg-[var(--brand-muted)]" style={{ aspectRatio: "3/4" }}>
                     <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-4">
-                    <p className="text-xs text-[#B8922A] uppercase tracking-widest font-semibold mb-1">{p.fabric}</p>
+                    <p className="text-xs text-[var(--brand-accent)] uppercase tracking-widest font-semibold mb-1">{p.fabric}</p>
                     <p className="font-semibold text-sm" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
-                    <p className="text-[#C4562A] font-bold text-sm mt-1">{ghs(p.price)}</p>
+                    <p className="text-[var(--brand-primary)] font-bold text-sm mt-1">{ghs(p.price)}</p>
                   </div>
                 </button>
               ))}
@@ -1254,7 +1262,7 @@ function CustomOrderPage() {
   });
   const total = 4;
   const whatsappNumber = String(settings.whatsapp_number ?? settings.store_phone ?? "").replace(/[^0-9]/g, "");
-  const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent("Hello Aunty Sala Fashion Gh, I need help with a custom order.")}` : undefined;
+  const whatsappUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`Hello ${brandName}, I need help with a custom order.`)}` : undefined;
 
   const up = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -1293,10 +1301,10 @@ function CustomOrderPage() {
 
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="bg-[#1A1A18] min-h-[280px] md:min-h-[360px] px-6 text-center relative overflow-hidden flex items-center justify-center">
+      <div className="bg-[var(--brand-foreground)] min-h-[280px] md:min-h-[360px] px-6 text-center relative overflow-hidden flex items-center justify-center">
         <ManagedImage src={siteMedia.custom_order_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
         <div className="relative z-10">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Bespoke Service</p>
+          <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Bespoke Service</p>
           <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Custom Made-to-Measure</h1>
           <p className="text-white/60 mt-2 text-sm">Your dream piece, crafted to your exact measurements. Ready in 2–4 weeks.</p>
         </div>
@@ -1312,12 +1320,12 @@ function CustomOrderPage() {
             return (
               <div key={s} className="flex-1 flex items-center">
                 <div className="flex flex-col items-center">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${done ? "bg-[#C4562A] border-[#C4562A] text-white" : active ? "border-[#C4562A] text-[#C4562A]" : "border-border text-muted-foreground"}`}>
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2 transition-colors ${done ? "bg-[var(--brand-primary)] border-[var(--brand-primary)] text-white" : active ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-border text-muted-foreground"}`}>
                     {done ? <Check size={14}/> : idx}
                   </div>
-                  <span className={`text-xs mt-1.5 font-medium ${active ? "text-[#C4562A]" : "text-muted-foreground"}`}>{s}</span>
+                  <span className={`text-xs mt-1.5 font-medium ${active ? "text-[var(--brand-primary)]" : "text-muted-foreground"}`}>{s}</span>
                 </div>
-                {i < 3 && <div className={`flex-1 h-0.5 mx-2 ${step > idx ? "bg-[#C4562A]" : "bg-border"}`} />}
+                {i < 3 && <div className={`flex-1 h-0.5 mx-2 ${step > idx ? "bg-[var(--brand-primary)]" : "bg-border"}`} />}
               </div>
             );
           })}
@@ -1332,7 +1340,7 @@ function CustomOrderPage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               {styles.map(s => (
                 <button key={s} onClick={() => up("style", s)}
-                  className={`p-3 rounded-xl border-2 text-sm font-semibold text-center transition-colors ${form.style === s ? "border-[#C4562A] bg-[#C4562A]/5 text-[#C4562A]" : "border-border hover:border-[#C4562A]"}`}>
+                  className={`p-3 rounded-xl border-2 text-sm font-semibold text-center transition-colors ${form.style === s ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5 text-[var(--brand-primary)]" : "border-border hover:border-[var(--brand-primary)]"}`}>
                   {s}
                 </button>
               ))}
@@ -1342,7 +1350,7 @@ function CustomOrderPage() {
               <div className="flex flex-wrap gap-2">
                 {occasions.map(o => (
                   <button key={o} onClick={() => up("occasion", o)}
-                    className={`px-4 py-2 rounded-full text-xs font-semibold border transition-colors ${form.occasion === o ? "bg-[#C4562A] text-white border-[#C4562A]" : "border-border hover:border-[#C4562A]"}`}>
+                    className={`px-4 py-2 rounded-full text-xs font-semibold border transition-colors ${form.occasion === o ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-border hover:border-[var(--brand-primary)]"}`}>
                     {o}
                   </button>
                 ))}
@@ -1351,14 +1359,14 @@ function CustomOrderPage() {
             <div className="mb-8">
               <p className="text-sm font-semibold mb-2">Budget Range</p>
               <select value={form.budget} onChange={e => up("budget", e.target.value)}
-                className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+                className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]">
                 <option value="">Select budget</option>
-                <option>GH₵ 300–500</option><option>GH₵ 500–800</option>
-                <option>GH₵ 800–1,200</option><option>GH₵ 1,200+</option>
+                <option>{ghs(300)}–{ghs(500)}</option><option>{ghs(500)}–{ghs(800)}</option>
+                <option>{ghs(800)}–{ghs(1200)}</option><option>{ghs(1200)}+</option>
               </select>
             </div>
             <button disabled={!form.style} onClick={() => setStep(2)}
-              className="w-full bg-[#C4562A] disabled:opacity-40 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+              className="w-full bg-[var(--brand-primary)] disabled:opacity-40 hover:bg-[var(--brand-primary-hover)] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
               Next: Choose Fabric <ArrowRight size={16}/>
             </button>
           </div>
@@ -1371,19 +1379,19 @@ function CustomOrderPage() {
             <div className="grid grid-cols-2 gap-4 mb-6">
               {fabrics.map(f => (
                 <button key={f.name} onClick={() => up("fabric", f.name)}
-                  className={`relative rounded-xl overflow-hidden border-2 transition-colors text-left ${form.fabric === f.name ? "border-[#C4562A]" : "border-transparent"}`}>
+                  className={`relative rounded-xl overflow-hidden border-2 transition-colors text-left ${form.fabric === f.name ? "border-[var(--brand-primary)]" : "border-transparent"}`}>
                   <ManagedImage src={f.img} alt={f.name} className="w-full h-32 object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex flex-col justify-end p-3">
                     <p className="text-white font-bold text-sm">{f.name}</p>
                     <p className="text-white/70 text-xs">{f.desc}</p>
                   </div>
-                  {form.fabric === f.name && <div className="absolute top-2 right-2 w-6 h-6 bg-[#C4562A] rounded-full flex items-center justify-center"><Check size={12} className="text-white"/></div>}
+                  {form.fabric === f.name && <div className="absolute top-2 right-2 w-6 h-6 bg-[var(--brand-primary)] rounded-full flex items-center justify-center"><Check size={12} className="text-white"/></div>}
                 </button>
               ))}
             </div>
             <div className="mb-8">
               <label className="block text-sm font-semibold mb-2">Reference Images / Inspiration</label>
-              <label className="block border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-[#C4562A] transition-colors cursor-pointer">
+              <label className="block border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-[var(--brand-primary)] transition-colors cursor-pointer">
                 <input
                   type="file"
                   accept="image/*,application/pdf"
@@ -1403,7 +1411,7 @@ function CustomOrderPage() {
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(1)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-              <button disabled={!form.fabric} onClick={() => setStep(3)} className="flex-1 bg-[#C4562A] disabled:opacity-40 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+              <button disabled={!form.fabric} onClick={() => setStep(3)} className="flex-1 bg-[var(--brand-primary)] disabled:opacity-40 hover:bg-[var(--brand-primary-hover)] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
                 Next: Measurements <ArrowRight size={16}/>
               </button>
             </div>
@@ -1419,20 +1427,20 @@ function CustomOrderPage() {
                 <div key={k}>
                   <label className="block text-sm font-semibold mb-1.5">{label} <span className="text-muted-foreground font-normal">(cm)</span></label>
                   <input type="number" value={(form as Record<string,string>)[k]} onChange={e => up(k, e.target.value)}
-                    placeholder="e.g. 90" className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[#C4562A]" />
+                    placeholder="e.g. 90" className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]" />
                 </div>
               ))}
             </div>
             <div className="bg-[#F0EAE0] rounded-xl p-4 mb-6 flex gap-3 items-start">
-              <MessageCircle size={16} className="text-[#B8922A] mt-0.5 shrink-0"/>
+              <MessageCircle size={16} className="text-[var(--brand-accent)] mt-0.5 shrink-0"/>
               <div>
-                <p className="text-sm font-semibold text-[#1A1A18]">Need help with measurements?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Our team can walk you through on WhatsApp. {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="text-[#C4562A] font-semibold hover:underline">Chat now →</a> : <span className="text-muted-foreground">Add a WhatsApp number in store settings.</span>}</p>
+                <p className="text-sm font-semibold text-[var(--brand-foreground)]">Need help with measurements?</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Our team can walk you through on WhatsApp. {whatsappUrl ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="text-[var(--brand-primary)] font-semibold hover:underline">Chat now →</a> : <span className="text-muted-foreground">Add a WhatsApp number in store settings.</span>}</p>
               </div>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(2)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-              <button onClick={() => setStep(4)} className="flex-1 bg-[#C4562A] hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+              <button onClick={() => setStep(4)} className="flex-1 bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
                 Next: Your Details <ArrowRight size={16}/>
               </button>
             </div>
@@ -1448,14 +1456,14 @@ function CustomOrderPage() {
                 <div key={k}>
                   <label className="block text-sm font-semibold mb-1.5">{label}</label>
                   <input type={type} value={(form as Record<string,string>)[k]} onChange={e => up(k, e.target.value)}
-                    className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[#C4562A]" />
+                    className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]" />
                 </div>
               ))}
               <div>
                 <label className="block text-sm font-semibold mb-1.5">Additional Notes</label>
                 <textarea value={form.notes} onChange={e => up("notes", e.target.value)} rows={3}
                   placeholder="Any specific design details, colour preferences, or special requests..."
-                  className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[#C4562A] resize-none" />
+                  className="w-full border border-border rounded-lg px-4 py-3 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)] resize-none" />
               </div>
             </div>
             {/* Summary */}
@@ -1466,7 +1474,7 @@ function CustomOrderPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Fabric:</span><span className="font-medium">{form.fabric || "–"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Occasion:</span><span className="font-medium">{form.occasion || "–"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Budget:</span><span className="font-medium">{form.budget || "–"}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Timeline:</span><span className="font-medium text-[#B8922A]">2–4 weeks</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Timeline:</span><span className="font-medium text-[var(--brand-accent)]">2–4 weeks</span></div>
               </div>
             </div>
             <div className="mb-5">
@@ -1478,7 +1486,7 @@ function CustomOrderPage() {
             </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-              <button disabled={submitting || !form.name || !form.email || !form.phone || !customOrderTurnstileToken} onClick={handleSubmit} className="flex-1 bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+              <button disabled={submitting || !form.name || !form.email || !form.phone || !customOrderTurnstileToken} onClick={handleSubmit} className="flex-1 bg-[var(--brand-primary)] disabled:opacity-50 hover:bg-[var(--brand-primary-hover)] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
                 {submitting ? (referenceFiles.length ? "Uploading & submitting…" : "Submitting…") : "Submit Order"} <Send size={15}/>
               </button>
             </div>
@@ -1493,13 +1501,13 @@ function CustomOrderPage() {
             </div>
             <h2 className="text-3xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>Order Received!</h2>
             <p className="text-muted-foreground mb-2">Thank you, <strong>{form.name || "dear customer"}</strong>.</p>
-            {submissionReference && <p className="text-sm font-semibold text-[#C4562A] mb-2">Reference {submissionReference}</p>}
+            {submissionReference && <p className="text-sm font-semibold text-[var(--brand-primary)] mb-2">Reference {submissionReference}</p>}
             <p className="text-sm text-muted-foreground max-w-sm mx-auto leading-relaxed">
               Our team will review your custom order and reach out within 24 hours via WhatsApp and email to confirm fabric availability and pricing.
             </p>
             <div className="mt-8 flex gap-3 justify-center">
               <button onClick={() => setStep(1)} className="border border-border px-6 py-3 rounded-lg text-sm font-semibold hover:bg-muted transition-colors">New Order</button>
-              {whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="bg-[#C4562A] text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
+              {whatsappUrl && <a href={whatsappUrl} target="_blank" rel="noreferrer" className="bg-[var(--brand-primary)] text-white px-6 py-3 rounded-lg text-sm font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors flex items-center gap-2">
                 <MessageCircle size={15}/> Chat on WhatsApp
               </a>}
             </div>
@@ -1551,7 +1559,7 @@ function CartPage({ cartItems, setCartItems, setPage, promoCode, setPromoCode }:
             <ShoppingCart size={48} className="mx-auto mb-4 text-muted-foreground/30" />
             <p className="text-lg font-semibold mb-2" style={{ fontFamily: "var(--font-display)" }}>Your cart is empty</p>
             <p className="text-sm text-muted-foreground mb-6">Discover our beautiful collection of African print fashion.</p>
-            <button onClick={() => setPage("shop")} className="bg-[#C4562A] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#A8411B] transition-colors">Shop Now</button>
+            <button onClick={() => setPage("shop")} className="bg-[var(--brand-primary)] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors">Shop Now</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1560,16 +1568,16 @@ function CartPage({ cartItems, setCartItems, setPage, promoCode, setPromoCode }:
               {cartItems.map((item, idx) => (
                 <div key={idx} className="bg-card rounded-xl p-5 flex gap-4 shadow-sm border border-border/40">
                   <img src={item.product.images[0]} alt={item.product.name}
-                    className="w-24 h-28 rounded-lg object-cover bg-[#E8E2D9] shrink-0 cursor-pointer"
+                    className="w-24 h-28 rounded-lg object-cover bg-[var(--brand-muted)] shrink-0 cursor-pointer"
                     onClick={() => setPage(`product-${item.product.slug}`)} />
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
                       <div>
-                        <p className="text-xs text-[#B8922A] uppercase tracking-widest font-bold">{item.product.fabric}</p>
+                        <p className="text-xs text-[var(--brand-accent)] uppercase tracking-widest font-bold">{item.product.fabric}</p>
                         <p className="font-bold text-base mt-0.5" style={{ fontFamily: "var(--font-display)" }}>{item.product.name}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Size: {item.size || "M"}</p>
                       </div>
-                      <button onClick={() => remove(idx)} className="text-muted-foreground hover:text-[#C4562A] transition-colors p-1">
+                      <button onClick={() => remove(idx)} className="text-muted-foreground hover:text-[var(--brand-primary)] transition-colors p-1">
                         <Trash2 size={16} />
                       </button>
                     </div>
@@ -1579,7 +1587,7 @@ function CartPage({ cartItems, setCartItems, setPage, promoCode, setPromoCode }:
                         <span className="w-10 text-center text-sm font-semibold">{item.qty}</span>
                         <button onClick={() => updateQty(idx, item.qty + 1)} className="w-8 h-8 flex items-center justify-center hover:bg-muted transition-colors"><Plus size={12}/></button>
                       </div>
-                      <p className="font-bold text-[#C4562A]">{ghs(item.product.price * item.qty)}</p>
+                      <p className="font-bold text-[var(--brand-primary)]">{ghs(item.product.price * item.qty)}</p>
                     </div>
                   </div>
                 </div>
@@ -1594,19 +1602,19 @@ function CartPage({ cartItems, setCartItems, setPage, promoCode, setPromoCode }:
                   <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span>{ghs(subtotal)}</span></div>
                   {quote?.promoApplied && <div className="flex justify-between text-green-700"><span>Promotion</span><span>− {ghs(discount)}</span></div>}
                   <div className="flex justify-between"><span className="text-muted-foreground">Shipping</span><span>{shipping === 0 ? "Free" : ghs(shipping)}</span></div>
-                  <div className="border-t border-border pt-3 flex justify-between font-bold text-base"><span>Total</span><span className="text-[#C4562A]">{ghs(total)}</span></div>
+                  <div className="border-t border-border pt-3 flex justify-between font-bold text-base"><span>Total</span><span className="text-[var(--brand-primary)]">{ghs(total)}</span></div>
                 </div>
                 {/* Promo */}
                 <div className="flex gap-2 mb-5">
                   <input value={promo} onChange={e => setPromo(e.target.value)}
-                    placeholder="Promo code" className="flex-1 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]" />
+                    placeholder="Promo code" className="flex-1 border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                   <button disabled={quoteLoading || !promo.trim()} onClick={() => setPromoCode(promo.trim().toUpperCase())}
-                    className="bg-[#1A1A18] text-white text-sm font-semibold px-4 rounded-lg hover:bg-[#2A2A20] transition-colors">Apply</button>
+                    className="bg-[var(--brand-foreground)] text-white text-sm font-semibold px-4 rounded-lg hover:bg-[#2A2A20] transition-colors">Apply</button>
                 </div>
                 {promoCode && quote?.promoMessage && <p className={`text-xs -mt-3 mb-4 ${quote.promoApplied ? "text-green-700" : "text-red-500"}`}>{quote.promoMessage}</p>}
                 {quoteError && <p role="alert" className="text-xs text-red-600 mb-4">{quoteError}</p>}
                 <button disabled={quoteLoading || !quote || Boolean(quoteError)} onClick={() => setPage("checkout")}
-                  className="w-full bg-[#C4562A] hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
+                  className="w-full bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
                   {quoteLoading ? "Checking total…" : "Proceed to Checkout"} <ArrowRight size={16}/>
                 </button>
                 <p className="text-xs text-muted-foreground text-center mt-3 flex items-center justify-center gap-1">
@@ -1643,7 +1651,7 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [shipping, setShipping] = useState({
     firstName: profileNameParts[0] ?? "", lastName: profileNameParts.slice(1).join(" "), email: session.user.email ?? "", phone: "",
-    address: "", city: "", country: "Ghana",
+    address: "", city: "", country: clientConfig.countryName,
   });
   const total = quote?.total ?? 0;
 
@@ -1781,7 +1789,7 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
         <h1 className="text-3xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>Order Placed!</h1>
         <p className="text-muted-foreground mb-1">Order {orderNumber} confirmed.</p>
         <p className="text-sm text-muted-foreground leading-relaxed mb-8">Your Paystack payment was verified and your order is ready for processing.</p>
-        <button onClick={() => setPage("account")} className="bg-[#C4562A] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[#A8411B] transition-colors">Track My Order</button>
+        <button onClick={() => setPage("account")} className="bg-[var(--brand-primary)] text-white px-8 py-3 rounded-lg font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors">Track My Order</button>
       </div>
     </div>
   );
@@ -1798,12 +1806,12 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
             return (
               <div key={s} className="flex-1 flex items-center">
                 <div className="flex flex-col items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 ${done ? "bg-[#C4562A] border-[#C4562A] text-white" : active ? "border-[#C4562A] text-[#C4562A]" : "border-border text-muted-foreground"}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 ${done ? "bg-[var(--brand-primary)] border-[var(--brand-primary)] text-white" : active ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-border text-muted-foreground"}`}>
                     {done ? <Check size={12}/> : idx}
                   </div>
-                  <span className={`text-xs mt-1 font-medium ${active ? "text-[#C4562A]" : "text-muted-foreground"}`}>{s}</span>
+                  <span className={`text-xs mt-1 font-medium ${active ? "text-[var(--brand-primary)]" : "text-muted-foreground"}`}>{s}</span>
                 </div>
-                {i < 2 && <div className={`flex-1 h-0.5 mx-2 ${step > idx ? "bg-[#C4562A]" : "bg-border"}`}/>}
+                {i < 2 && <div className={`flex-1 h-0.5 mx-2 ${step > idx ? "bg-[var(--brand-primary)]" : "bg-border"}`}/>}
               </div>
             );
           })}
@@ -1822,7 +1830,7 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                       <div className="space-y-3 mb-5">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Saved addresses</p>
                         {addresses.map((address) => (
-                          <label key={address.id} className={`block cursor-pointer rounded-xl border-2 p-4 transition-colors ${addressMode === "saved" && selectedAddressId === address.id ? "border-[#C4562A] bg-[#C4562A]/5" : "border-border hover:border-[#C4562A]/40"}`}>
+                          <label key={address.id} className={`block cursor-pointer rounded-xl border-2 p-4 transition-colors ${addressMode === "saved" && selectedAddressId === address.id ? "border-[var(--brand-primary)] bg-[var(--brand-primary)]/5" : "border-border hover:border-[var(--brand-primary)]/40"}`}>
                             <input type="radio" name="shipping-address" className="sr-only" checked={addressMode === "saved" && selectedAddressId === address.id} onChange={() => applySavedAddress(address)} />
                             <div className="flex items-start justify-between gap-3">
                               <div>
@@ -1831,7 +1839,7 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                                 <p className="text-sm text-muted-foreground">{address.city}, {address.country}</p>
                                 {address.phone && <p className="text-xs text-muted-foreground mt-1">{address.phone}</p>}
                               </div>
-                              {address.isDefault && <span className="text-[10px] font-bold uppercase text-[#C4562A]">Default</span>}
+                              {address.isDefault && <span className="text-[10px] font-bold uppercase text-[var(--brand-primary)]">Default</span>}
                             </div>
                           </label>
                         ))}
@@ -1841,8 +1849,8 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                     <button type="button" onClick={() => {
                       setAddressMode("new");
                       setSelectedAddressId("");
-                      setShipping((current) => ({ ...current, phone: "", address: "", city: "", country: "Ghana" }));
-                    }} className={`w-full border-2 border-dashed rounded-xl p-4 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${addressMode === "new" ? "border-[#C4562A] text-[#C4562A]" : "border-border text-muted-foreground hover:border-[#C4562A]"}`}>
+                      setShipping((current) => ({ ...current, phone: "", address: "", city: "", country: clientConfig.countryName }));
+                    }} className={`w-full border-2 border-dashed rounded-xl p-4 text-sm font-semibold transition-colors flex items-center justify-center gap-2 ${addressMode === "new" ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-border text-muted-foreground hover:border-[var(--brand-primary)]"}`}>
                       <Plus size={16}/> Add a new address
                     </button>
 
@@ -1851,17 +1859,17 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                         {[["firstName","First Name","text"],["lastName","Last Name","text"],["email","Email","email"],["phone","Phone","tel"]].map(([key,label,type]) => (
                           <div key={key}>
                             <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                            <input required type={type} value={shipping[key as keyof typeof shipping]} onChange={(event) => updateShipping(key as keyof typeof shipping, event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                            <input required type={type} value={shipping[key as keyof typeof shipping]} onChange={(event) => updateShipping(key as keyof typeof shipping, event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                           </div>
                         ))}
                         <div className="col-span-2">
                           <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Address</label>
-                          <input required type="text" value={shipping.address} onChange={(event) => updateShipping("address", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                          <input required type="text" value={shipping.address} onChange={(event) => updateShipping("address", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                         </div>
                         {[["city","City","text"],["country","Country","text"]].map(([key,label,type]) => (
                           <div key={key}>
                             <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                            <input required type={type} value={shipping[key as keyof typeof shipping]} onChange={(event) => updateShipping(key as keyof typeof shipping, event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                            <input required type={type} value={shipping[key as keyof typeof shipping]} onChange={(event) => updateShipping(key as keyof typeof shipping, event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                           </div>
                         ))}
                         <p className="col-span-2 text-xs text-muted-foreground">This address will be saved to your account.</p>
@@ -1872,18 +1880,18 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                       <div className="grid grid-cols-2 gap-4 mt-5">
                         <div>
                           <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Email</label>
-                          <input type="email" value={shipping.email} onChange={(event) => updateShipping("email", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                          <input type="email" value={shipping.email} onChange={(event) => updateShipping("email", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                         </div>
                         <div>
                           <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Phone</label>
-                          <input type="tel" value={shipping.phone} onChange={(event) => updateShipping("phone", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                          <input type="tel" value={shipping.phone} onChange={(event) => updateShipping("phone", event.target.value)} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                         </div>
                       </div>
                     )}
                   </>
                 )}
                 {addressError && <p role="alert" className="mt-4 text-sm text-red-600">{addressError}</p>}
-                <button disabled={addressesLoading || savingAddress || !shipping.firstName || !shipping.email || !shipping.phone || !shipping.address || !shipping.city} onClick={() => void handleShippingContinue()} className="mt-6 w-full bg-[#C4562A] disabled:opacity-50 text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors flex items-center justify-center gap-2">
+                <button disabled={addressesLoading || savingAddress || !shipping.firstName || !shipping.email || !shipping.phone || !shipping.address || !shipping.city} onClick={() => void handleShippingContinue()} className="mt-6 w-full bg-[var(--brand-primary)] disabled:opacity-50 text-white py-3.5 rounded-lg font-bold hover:bg-[var(--brand-primary-hover)] transition-colors flex items-center justify-center gap-2">
                   {savingAddress ? "Saving address…" : "Continue to Payment"} <ArrowRight size={16}/>
                 </button>
               </div>
@@ -1893,12 +1901,12 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
               <div className="bg-card rounded-xl p-6 border border-border/40 shadow-sm">
                 <h2 className="font-bold text-lg mb-5" style={{ fontFamily: "var(--font-display)" }}>Secure Paystack Checkout</h2>
                 <div className="rounded-xl border border-border bg-muted/30 p-5 mb-6 flex gap-4">
-                  <div className="w-10 h-10 bg-[#C4562A]/10 rounded-lg flex items-center justify-center shrink-0"><CreditCard size={19} className="text-[#C4562A]"/></div>
-                  <div><p className="font-semibold text-sm">Mobile Money and international cards</p><p className="text-xs text-muted-foreground mt-1 leading-relaxed">After reviewing your order, Paystack will securely collect and verify your payment. Aunty Sala Fashion Gh never receives your card number or CVV.</p></div>
+                  <div className="w-10 h-10 bg-[var(--brand-primary)]/10 rounded-lg flex items-center justify-center shrink-0"><CreditCard size={19} className="text-[var(--brand-primary)]"/></div>
+                  <div><p className="font-semibold text-sm">Mobile Money and international cards</p><p className="text-xs text-muted-foreground mt-1 leading-relaxed">After reviewing your order, Paystack will securely collect and verify your payment. {brandName} never receives your card number or CVV.</p></div>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setStep(1)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-                  <button onClick={() => setStep(3)} className="flex-1 bg-[#C4562A] text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors flex items-center justify-center gap-2">
+                  <button onClick={() => setStep(3)} className="flex-1 bg-[var(--brand-primary)] text-white py-3.5 rounded-lg font-bold hover:bg-[var(--brand-primary-hover)] transition-colors flex items-center justify-center gap-2">
                     Review Order <ArrowRight size={16}/>
                   </button>
                 </div>
@@ -1911,21 +1919,21 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                 <div className="space-y-3 mb-5">
                   {cartItems.map((item, i) => (
                     <div key={i} className="flex gap-3 items-center">
-                      <img src={item.product.images[0]} alt={item.product.name} className="w-14 h-16 rounded-lg object-cover bg-[#E8E2D9]" />
+                      <img src={item.product.images[0]} alt={item.product.name} className="w-14 h-16 rounded-lg object-cover bg-[var(--brand-muted)]" />
                       <div className="flex-1">
                         <p className="font-semibold text-sm" style={{ fontFamily: "var(--font-display)" }}>{item.product.name}</p>
                         <p className="text-xs text-muted-foreground">Qty: {item.qty} · Size: {item.size || "M"}</p>
                       </div>
-                      <p className="font-bold text-sm text-[#C4562A]">{ghs(item.product.price * item.qty)}</p>
+                      <p className="font-bold text-sm text-[var(--brand-primary)]">{ghs(item.product.price * item.qty)}</p>
                     </div>
                   ))}
                 </div>
                 <div className="border-t border-border pt-4 flex justify-between font-bold mb-6">
-                  <span>Total</span><span className="text-[#C4562A]">{ghs(total)}</span>
+                  <span>Total</span><span className="text-[var(--brand-primary)]">{ghs(total)}</span>
                 </div>
                 <div className="flex gap-3">
                   <button onClick={() => setStep(2)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-                  <button disabled={placingOrder || verifyingPayment || quoteLoading || !quote || cartItems.length === 0} onClick={handlePlaceOrder} className="flex-1 bg-[#C4562A] disabled:opacity-50 text-white py-3.5 rounded-lg font-bold hover:bg-[#A8411B] transition-colors">{placingOrder ? "Opening Paystack…" : verifyingPayment ? "Verifying…" : "Pay with Paystack"}</button>
+                  <button disabled={placingOrder || verifyingPayment || quoteLoading || !quote || cartItems.length === 0} onClick={handlePlaceOrder} className="flex-1 bg-[var(--brand-primary)] disabled:opacity-50 text-white py-3.5 rounded-lg font-bold hover:bg-[var(--brand-primary-hover)] transition-colors">{placingOrder ? "Opening Paystack…" : verifyingPayment ? "Verifying…" : "Pay with Paystack"}</button>
                 </div>
                 {orderError && <p role="alert" className="text-sm text-red-600 mt-3">{orderError}</p>}
               </div>
@@ -1941,7 +1949,7 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
                 <span className="font-semibold shrink-0 ml-2">{ghs(item.product.price * item.qty)}</span>
               </div>
             ))}
-            <div className="border-t border-border pt-3 mt-2 flex justify-between font-bold text-[#C4562A]">
+            <div className="border-t border-border pt-3 mt-2 flex justify-between font-bold text-[var(--brand-primary)]">
               <span>Total</span><span>{ghs(total)}</span>
             </div>
             {quote?.discountAmount ? <p className="mt-2 text-xs text-green-700">Promotion saved you {ghs(quote.discountAmount)}</p> : null}
@@ -2008,27 +2016,27 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
   return (
     <div className={`relative flex min-h-screen items-start justify-center overflow-y-auto px-4 py-6 sm:px-6 ${isAdminLogin ? "bg-[#2B2822]" : "fixed inset-0 z-[80] bg-transparent"}`} style={{ fontFamily: "var(--font-body)" }}>
       {!isAdminLogin ? <>
-        <img src="/aunty-sala-hero-elegant.webp" alt="" aria-hidden="true" className="pointer-events-none fixed inset-0 h-full w-full scale-105 object-cover object-center" />
+        <img src={clientConfig.assets.heroFallback} alt="" aria-hidden="true" className="pointer-events-none fixed inset-0 h-full w-full scale-105 object-cover object-center" />
         <div className="pointer-events-none fixed inset-0 bg-[#141311]/65 backdrop-blur-[6px]" />
-        <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-black/25 via-transparent to-[#C4562A]/15" />
+        <div className="pointer-events-none fixed inset-0 bg-gradient-to-br from-black/25 via-transparent to-[var(--brand-primary)]/15" />
         <a href="/" aria-label="Close sign in and return to the store" className="fixed right-4 top-4 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-black/35 text-white shadow-lg backdrop-blur-md transition-colors hover:bg-black/55 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60 sm:right-6 sm:top-6"><X size={19} /></a>
       </> : null}
-      <div className="pointer-events-none fixed -left-24 top-1/4 h-72 w-72 rounded-full bg-[#C4562A]/15 blur-3xl" />
-      <div className="pointer-events-none fixed -right-20 bottom-0 h-80 w-80 rounded-full bg-[#B8922A]/15 blur-3xl" />
+      <div className="pointer-events-none fixed -left-24 top-1/4 h-72 w-72 rounded-full bg-[var(--brand-primary)]/15 blur-3xl" />
+      <div className="pointer-events-none fixed -right-20 bottom-0 h-80 w-80 rounded-full bg-[var(--brand-accent)]/15 blur-3xl" />
 
       <div className="relative z-10 my-auto grid w-full max-w-6xl overflow-hidden rounded-[2rem] border border-white/40 bg-card shadow-[0_30px_90px_rgba(0,0,0,0.35)] lg:min-h-[700px] lg:grid-cols-[1.08fr_0.92fr]">
-        <section className="relative hidden overflow-hidden bg-[#1A1A18] lg:flex lg:flex-col lg:justify-between" aria-label="Aunty Sala Fashion Gh">
-          <img src="/aunty-sala-hero-elegant.webp" alt="Model wearing an Aunty Sala African print dress" className="absolute inset-0 h-full w-full object-cover object-center" />
+        <section className="relative hidden overflow-hidden bg-[var(--brand-foreground)] lg:flex lg:flex-col lg:justify-between" aria-label={brandName}>
+          <img src={clientConfig.assets.heroFallback} alt={`Model wearing a ${brandName} design`} className="absolute inset-0 h-full w-full object-cover object-center" />
           <div className={`absolute inset-0 bg-gradient-to-b ${isAdminLogin ? "from-black/10 via-black/5 to-black/65" : "from-black/20 via-black/10 to-black/85"}`} />
           <div className={`absolute inset-0 bg-gradient-to-r ${isAdminLogin ? "from-black/15 via-transparent to-black/5" : "from-black/25 via-transparent to-black/15"}`} />
 
           <div className="relative flex items-center gap-3 p-8">
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-black/25 backdrop-blur-md"><img src="/aunty-sala-logo.png" alt="" className="h-11 w-auto object-contain" /></span>
-            <div><p className="font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala Fashion Gh</p><p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-[#E0BD5B]">Everything fashionable</p></div>
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/15 bg-black/25 backdrop-blur-md"><img src={clientConfig.assets.logo} alt="" className="h-11 w-auto object-contain" /></span>
+            <div><p className="font-bold text-white" style={{ fontFamily: "var(--font-display)" }}>{brandName}</p><p className="mt-0.5 text-[9px] font-bold uppercase tracking-[0.24em] text-[#E0BD5B]">{clientConfig.tagline}</p></div>
           </div>
 
           <div className="relative p-8 xl:p-10">
-            <span className="mb-4 inline-flex rounded-full border border-white/15 bg-black/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#E0BD5B] backdrop-blur-md">{isAdminLogin ? "Private workspace" : "Made in Accra"}</span>
+            <span className="mb-4 inline-flex rounded-full border border-white/15 bg-black/20 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[#E0BD5B] backdrop-blur-md">{isAdminLogin ? "Private workspace" : `Made in ${clientConfig.city}`}</span>
             <h2 className="max-w-lg text-4xl font-bold leading-[1.08] text-white xl:text-5xl" style={{ fontFamily: "var(--font-display)" }}>
               {isAdminLogin ? "Your store, beautifully managed." : "Your style journey continues here."}
             </h2>
@@ -2044,18 +2052,18 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
         <section className="relative flex items-center bg-[#FCFAF7] px-5 py-8 sm:px-10 sm:py-12 lg:px-12 xl:px-14">
           <div className="mx-auto w-full max-w-md">
             <div className="mb-8 flex items-center justify-between lg:hidden">
-              <div className="flex items-center gap-3"><img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh" className="h-12 w-auto object-contain" /><div><p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala</p><p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[#B8922A]">Fashion Gh</p></div></div>
-              <span className="rounded-full bg-[#C4562A]/8 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-[#C4562A]">{isAdminLogin ? "Admin" : "Account"}</span>
+              <div className="flex items-center gap-3"><img src={clientConfig.assets.logo} alt={brandName} className="h-12 w-auto object-contain" /><div><p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>{brandShortName}</p><p className="text-[8px] font-bold uppercase tracking-[0.2em] text-[var(--brand-accent)]">{clientConfig.nameSuffix}</p></div></div>
+              <span className="rounded-full bg-[var(--brand-primary)]/8 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-[var(--brand-primary)]">{isAdminLogin ? "Admin" : "Account"}</span>
             </div>
 
             <div className="mb-7">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#B8922A]/20 bg-[#B8922A]/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A6E1E]"><User size={12} />{isAdminLogin ? "Authorized team members" : "Your personal account"}</div>
-              <h1 className="text-3xl font-bold leading-tight text-[#1A1A18] sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>{isAdminLogin ? "Welcome to the studio" : "Welcome back"}</h1>
-              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">{isAdminLogin ? "Sign in with your approved staff email to continue to the admin portal." : "Sign in securely to continue shopping and manage your Aunty Sala experience."}</p>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--brand-accent)]/20 bg-[var(--brand-accent)]/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A6E1E]"><User size={12} />{isAdminLogin ? "Authorized team members" : "Your personal account"}</div>
+              <h1 className="text-3xl font-bold leading-tight text-[var(--brand-foreground)] sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>{isAdminLogin ? "Welcome to the studio" : "Welcome back"}</h1>
+              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">{isAdminLogin ? "Sign in with your approved staff email to continue to the admin portal." : `Sign in securely to continue shopping and manage your ${brandShortName} experience.`}</p>
             </div>
 
             <button type="button" onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
-              className="group flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm font-bold text-[#1A1A18] shadow-[0_4px_14px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#C4562A]/35 hover:shadow-[0_8px_22px_rgba(26,26,24,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/10 disabled:cursor-not-allowed disabled:opacity-50">
+              className="group flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm font-bold text-[var(--brand-foreground)] shadow-[0_4px_14px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:border-[var(--brand-primary)]/35 hover:shadow-[0_8px_22px_rgba(26,26,24,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[var(--brand-primary)]/10 disabled:cursor-not-allowed disabled:opacity-50">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-sm font-black text-[#4285F4] shadow-sm">G</span>
               Continue with Google
             </button>
@@ -2063,10 +2071,10 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
             <div className="my-6 flex items-center gap-3" aria-hidden="true"><div className="h-px flex-1 bg-border" /><span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">or sign in without a password</span><div className="h-px flex-1 bg-border" /></div>
 
             <form onSubmit={handleMagicLink} className="space-y-4">
-              <label htmlFor="login-email" className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Email address</span><div className="relative"><Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" /><input id="login-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="min-h-12 w-full rounded-xl border border-border bg-white py-3 pl-11 pr-4 text-sm transition-all placeholder:text-muted-foreground/45 focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" /></div></label>
+              <label htmlFor="login-email" className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Email address</span><div className="relative"><Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" /><input id="login-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="min-h-12 w-full rounded-xl border border-border bg-white py-3 pl-11 pr-4 text-sm transition-all placeholder:text-muted-foreground/45 focus:border-[var(--brand-primary)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-primary)]/8" /></div></label>
               <div className="overflow-hidden rounded-xl border border-border/60 bg-white p-3"><TurnstileWidget key={loginTurnstileReset} onVerify={setLoginTurnstileToken} onError={setError} /></div>
               <button type="submit" disabled={sending || !isSupabaseConfigured || !loginTurnstileToken}
-                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(196,86,42,0.22)] transition-all hover:-translate-y-0.5 hover:bg-[#A8411B] hover:shadow-[0_14px_28px_rgba(196,86,42,0.26)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0">
+                className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(196,86,42,0.22)] transition-all hover:-translate-y-0.5 hover:bg-[var(--brand-primary-hover)] hover:shadow-[0_14px_28px_rgba(196,86,42,0.26)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[var(--brand-primary)]/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0">
                 <Mail size={15} /> {sending ? "Sending your secure link…" : "Send me a magic link"}
               </button>
             </form>
@@ -2075,7 +2083,7 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
             {error ? <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={17} className="mt-0.5 shrink-0" />{error}</p> : null}
 
             <div className="mt-6 flex items-start gap-2.5 rounded-xl bg-[#F3ECE2]/70 p-3 text-[11px] leading-relaxed text-muted-foreground"><CheckCircle size={15} className="mt-0.5 shrink-0 text-[#7A8C6E]" /><p>We use passwordless sign-in to protect your account. Your secure email link can only be used once.</p></div>
-            <p className="mt-6 text-center text-[10px] leading-relaxed text-muted-foreground">By continuing, you agree to our <a href={isAdminLogin ? `${STORE_ORIGIN}/terms-of-service` : "/terms-of-service"} className="font-semibold text-[#C4562A] hover:underline">Terms of Service</a> and <a href={isAdminLogin ? `${STORE_ORIGIN}/privacy-policy` : "/privacy-policy"} className="font-semibold text-[#C4562A] hover:underline">Privacy Policy</a>.</p>
+            <p className="mt-6 text-center text-[10px] leading-relaxed text-muted-foreground">By continuing, you agree to our <a href={isAdminLogin ? `${STORE_ORIGIN}/terms-of-service` : "/terms-of-service"} className="font-semibold text-[var(--brand-primary)] hover:underline">Terms of Service</a> and <a href={isAdminLogin ? `${STORE_ORIGIN}/privacy-policy` : "/privacy-policy"} className="font-semibold text-[var(--brand-primary)] hover:underline">Privacy Policy</a>.</p>
           </div>
         </section>
       </div>
@@ -2095,7 +2103,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
   const [editingMeasurements, setEditingMeasurements] = useState(false);
   const [measurementForm, setMeasurementForm] = useState({ bust: "", waist: "", hips: "", height: "", shoulderWidth: "", armLength: "" });
   const [editingAddress, setEditingAddress] = useState<SavedAddress | "new" | null>(null);
-  const [addressForm, setAddressForm] = useState({ recipientName: "", address: "", city: "", country: "Ghana", phone: "", isDefault: false });
+  const [addressForm, setAddressForm] = useState({ recipientName: "", address: "", city: "", country: clientConfig.countryName, phone: "", isDefault: false });
   const displayName = session.user.user_metadata.full_name
     || session.user.user_metadata.name
     || session.user.email?.split("@")[0]
@@ -2152,7 +2160,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
   const beginAddressEdit = (address?: SavedAddress) => {
     setEditingAddress(address ?? "new");
     setAddressForm(address ? { recipientName: address.recipientName, address: address.address, city: address.city, country: address.country, phone: address.phone, isDefault: address.isDefault }
-      : { recipientName: displayName, address: "", city: "", country: "Ghana", phone: "", isDefault: (accountData?.addresses.length ?? 0) === 0 });
+      : { recipientName: displayName, address: "", city: "", country: clientConfig.countryName, phone: "", isDefault: (accountData?.addresses.length ?? 0) === 0 });
     setAccountMessage("");
   };
   const handleAddressSave = async (event: FormEvent<HTMLFormElement>) => {
@@ -2183,23 +2191,28 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
       <div className="max-w-5xl mx-auto px-6 lg:px-10">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <div className="w-14 h-14 bg-[#C4562A] rounded-full flex items-center justify-center">
+          <div className="w-14 h-14 bg-[var(--brand-primary)] rounded-full flex items-center justify-center">
             <User size={24} className="text-white" />
           </div>
           <div className="flex-1">
             <h1 className="text-2xl font-bold capitalize" style={{ fontFamily: "var(--font-display)" }}>{displayName}</h1>
             <p className="text-sm text-muted-foreground">{session.user.email} · Member since {joinedDate}</p>
           </div>
-          <button onClick={onSignOut} className="border border-border rounded-lg px-4 py-2 text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center gap-2">
+          <button onClick={onSignOut} className="border border-border rounded-lg px-4 py-2 text-sm font-semibold hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors flex items-center gap-2">
             <LogOut size={14} /> Sign out
           </button>
         </div>
 
         {/* Tabs */}
         <div className="flex gap-6 border-b border-border mb-8">
-          {[["orders","Orders"],["measurements","Measurements"],["wishlist","Wishlist"],["addresses","Addresses"]].map(([k,label]) => (
+          {[
+            ["orders","Orders"],
+            ["measurements","Measurements"],
+            ...(clientConfig.features.wishlist ? [["wishlist","Wishlist"]] : []),
+            ["addresses","Addresses"],
+          ].map(([k,label]) => (
             <button key={k} onClick={() => setTab(k)}
-              className={`text-sm font-semibold pb-3 border-b-2 transition-colors ${tab === k ? "border-[#C4562A] text-[#C4562A]" : "border-transparent text-muted-foreground hover:text-[#1A1A18]"}`}>
+              className={`text-sm font-semibold pb-3 border-b-2 transition-colors ${tab === k ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-transparent text-muted-foreground hover:text-[var(--brand-foreground)]"}`}>
               {label}
             </button>
           ))}
@@ -2240,13 +2253,13 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-bold text-sm font-mono">{o.id}</p>
-                        {o.isCustom && <span className="rounded-full bg-[#B8922A]/15 text-[#7A5D10] px-2 py-0.5 text-[9px] font-bold tracking-wider">CUSTOM ORDER</span>}
+                        {o.isCustom && <span className="rounded-full bg-[var(--brand-accent)]/15 text-[#7A5D10] px-2 py-0.5 text-[9px] font-bold tracking-wider">CUSTOM ORDER</span>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-1">{o.date} · {o.isCustom ? o.items : `${o.itemDetails.length} ${o.itemDetails.length === 1 ? "item" : "items"}`}</p>
                     </div>
                     <div className="flex items-center gap-3 ml-auto">
-                      <span className={`font-bold ${o.amount == null ? "text-xs text-muted-foreground" : "text-[#C4562A]"}`}>{o.amount == null ? "Quote pending" : ghs(o.amount)}</span>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${o.status === "Cancelled" ? statusColor.Cancelled : o.isCustom ? "bg-[#B8922A]/15 text-[#7A5D10]" : statusColor[o.status] || "bg-gray-50 text-gray-600"}`}>{o.status}</span>
+                      <span className={`font-bold ${o.amount == null ? "text-xs text-muted-foreground" : "text-[var(--brand-primary)]"}`}>{o.amount == null ? "Quote pending" : ghs(o.amount)}</span>
+                      <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${o.status === "Cancelled" ? statusColor.Cancelled : o.isCustom ? "bg-[var(--brand-accent)]/15 text-[#7A5D10]" : statusColor[o.status] || "bg-gray-50 text-gray-600"}`}>{o.status}</span>
                       <ChevronDown size={18} className={`text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`} />
                     </div>
                   </button>
@@ -2294,7 +2307,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                         </>
                       )}
                       {o.isCustom && custom && (
-                        <div className="mb-6 rounded-xl border border-[#C4562A]/25 bg-[#FFF8F3] p-4 md:p-5">
+                        <div className="mb-6 rounded-xl border border-[var(--brand-primary)]/25 bg-[#FFF8F3] p-4 md:p-5">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <h3 className="text-xs font-bold uppercase tracking-wider text-[#9B3F1D]">Quote &amp; payment</h3>
@@ -2318,7 +2331,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                             <div className="mt-4 grid grid-cols-3 gap-3 rounded-lg bg-white p-3 border border-border/60">
                               <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Quote</p><p className="mt-1 text-sm font-bold">{ghs(quotedTotal)}</p></div>
                               <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Paid</p><p className="mt-1 text-sm font-bold text-green-700">{ghs(paidAmount)}</p></div>
-                              <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Balance</p><p className="mt-1 text-sm font-bold text-[#C4562A]">{ghs(balance)}</p></div>
+                              <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Balance</p><p className="mt-1 text-sm font-bold text-[var(--brand-primary)]">{ghs(balance)}</p></div>
                             </div>
                           )}
                           {canPayCustom && (
@@ -2326,7 +2339,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                               type="button"
                               disabled={customPaymentLoadingId === custom.customOrderId || customPaymentVerifying}
                               onClick={() => handleCustomPayment(custom.customOrderId)}
-                              className="mt-4 w-full rounded-lg bg-[#1A1A18] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[#C4562A] disabled:cursor-not-allowed disabled:opacity-50"
+                              className="mt-4 w-full rounded-lg bg-[var(--brand-foreground)] px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-[var(--brand-primary)] disabled:cursor-not-allowed disabled:opacity-50"
                             >
                               {customPaymentLoadingId === custom.customOrderId
                                 ? "Opening secure payment…"
@@ -2342,13 +2355,13 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                           return (
                             <div key={status} className="flex items-center shrink-0">
                               <div className="flex flex-col items-center">
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${done ? "bg-[#C4562A] border-[#C4562A]" : "border-border"}`}>
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${done ? "bg-[var(--brand-primary)] border-[var(--brand-primary)]" : "border-border"}`}>
                                   {done && <Check size={12} className="text-white"/>}
                                 </div>
-                                <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${done ? "text-[#C4562A]" : "text-muted-foreground"}`}>{status}</span>
+                                <span className={`text-[10px] mt-1 font-medium whitespace-nowrap ${done ? "text-[var(--brand-primary)]" : "text-muted-foreground"}`}>{status}</span>
                               </div>
                               {index < progressSteps.length - 1 && (
-                                <div className={`w-12 h-0.5 mx-1 ${index < stepIdx ? "bg-[#C4562A]" : "bg-border"}`} />
+                                <div className={`w-12 h-0.5 mx-1 ${index < stepIdx ? "bg-[var(--brand-primary)]" : "bg-border"}`} />
                               )}
                             </div>
                           );
@@ -2374,7 +2387,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
               ))}
             </div>
             {accountData.measurements.length === 0 && <p className="text-sm text-muted-foreground">No measurements saved.</p>}
-            <button onClick={beginMeasurementEdit} className="mt-5 w-full border border-border py-3 rounded-lg text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center justify-center gap-2">
+            <button onClick={beginMeasurementEdit} className="mt-5 w-full border border-border py-3 rounded-lg text-sm font-semibold hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors flex items-center justify-center gap-2">
               <Edit size={14}/> Update Measurements
             </button>
             {editingMeasurements && <form onSubmit={handleMeasurementSave} className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-5">
@@ -2382,7 +2395,7 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
                 <label className="block text-xs font-semibold mb-1 text-muted-foreground">{label} (cm)</label>
                 <input type="number" min="1" step="0.1" value={measurementForm[key]} onChange={(event) => setMeasurementForm((current) => ({ ...current, [key]: event.target.value }))} className="w-full border border-border rounded-lg px-3 py-2 text-sm" />
               </div>)}
-              <div className="col-span-2 flex gap-2"><button type="button" onClick={() => setEditingMeasurements(false)} className="flex-1 border border-border rounded-lg py-2 text-sm font-semibold">Cancel</button><button disabled={accountSaving} type="submit" className="flex-1 bg-[#C4562A] text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">{accountSaving ? "Saving…" : "Save"}</button></div>
+              <div className="col-span-2 flex gap-2"><button type="button" onClick={() => setEditingMeasurements(false)} className="flex-1 border border-border rounded-lg py-2 text-sm font-semibold">Cancel</button><button disabled={accountSaving} type="submit" className="flex-1 bg-[var(--brand-primary)] text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">{accountSaving ? "Saving…" : "Save"}</button></div>
             </form>}
           </div>
         )}
@@ -2391,13 +2404,13 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
             {accountData.wishlist.map(p => (
               <div key={p.id} className="bg-card rounded-xl overflow-hidden border border-border/40 shadow-sm group">
-                <div className="overflow-hidden bg-[#E8E2D9]" style={{ aspectRatio: "3/4" }}>
+                <div className="overflow-hidden bg-[var(--brand-muted)]" style={{ aspectRatio: "3/4" }}>
                   <img src={p.images[0]} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                 </div>
                 <div className="p-3">
-                  <p className="text-xs text-[#B8922A] uppercase tracking-widest font-bold">{p.fabric}</p>
+                  <p className="text-xs text-[var(--brand-accent)] uppercase tracking-widest font-bold">{p.fabric}</p>
                   <p className="font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>{p.name}</p>
-                  <p className="text-[#C4562A] font-bold text-sm">{ghs(p.price)}</p>
+                  <p className="text-[var(--brand-primary)] font-bold text-sm">{ghs(p.price)}</p>
                 </div>
               </div>
             ))}
@@ -2408,24 +2421,24 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
         {accountData && tab === "addresses" && (
           <div className="max-w-lg">
             {accountData.addresses.map((address) => (
-              <div key={address.id} className={`bg-card rounded-xl p-5 border shadow-sm mb-4 ${address.isDefault ? "border-2 border-[#C4562A]" : "border-border"}`}>
+              <div key={address.id} className={`bg-card rounded-xl p-5 border shadow-sm mb-4 ${address.isDefault ? "border-2 border-[var(--brand-primary)]" : "border-border"}`}>
                 <div className="flex justify-between mb-2">
-                  {address.isDefault && <span className="text-xs font-bold text-[#C4562A] uppercase tracking-wide">Default</span>}
-                  <button onClick={() => beginAddressEdit(address)} aria-label={`Edit ${address.recipientName} address`} className="ml-auto text-xs text-muted-foreground hover:text-[#C4562A]"><Edit size={12}/></button>
+                  {address.isDefault && <span className="text-xs font-bold text-[var(--brand-primary)] uppercase tracking-wide">Default</span>}
+                  <button onClick={() => beginAddressEdit(address)} aria-label={`Edit ${address.recipientName} address`} className="ml-auto text-xs text-muted-foreground hover:text-[var(--brand-primary)]"><Edit size={12}/></button>
                 </div>
                 <p className="font-bold text-sm capitalize">{address.recipientName}</p>
                 <p className="text-sm text-muted-foreground">{address.address}, {address.city}, {address.country}</p>
               </div>
             ))}
             {accountData.addresses.length === 0 && <p className="mb-4 text-sm text-muted-foreground">No saved addresses.</p>}
-            <button onClick={() => beginAddressEdit()} className="w-full border-2 border-dashed border-border rounded-xl p-4 text-sm font-semibold text-muted-foreground hover:border-[#C4562A] hover:text-[#C4562A] transition-colors flex items-center justify-center gap-2">
+            <button onClick={() => beginAddressEdit()} className="w-full border-2 border-dashed border-border rounded-xl p-4 text-sm font-semibold text-muted-foreground hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors flex items-center justify-center gap-2">
               <Plus size={16}/> Add New Address
             </button>
             {editingAddress && <form onSubmit={handleAddressSave} className="mt-5 space-y-3 rounded-xl border border-border p-5">
               <h3 className="font-bold">{editingAddress === "new" ? "New Address" : "Edit Address"}</h3>
               {([['recipientName','Recipient name'],['address','Street address'],['city','City'],['country','Country'],['phone','Phone']] as const).map(([key, label]) => <div key={key}><label className="block text-xs font-semibold mb-1 text-muted-foreground">{label}</label><input required value={addressForm[key]} onChange={(event) => setAddressForm((current) => ({ ...current, [key]: event.target.value }))} className="w-full border border-border rounded-lg px-3 py-2 text-sm" /></div>)}
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={addressForm.isDefault} onChange={(event) => setAddressForm((current) => ({ ...current, isDefault: event.target.checked }))} /> Set as default</label>
-              <div className="flex gap-2"><button type="button" onClick={() => setEditingAddress(null)} className="flex-1 border border-border rounded-lg py-2 text-sm font-semibold">Cancel</button><button disabled={accountSaving} type="submit" className="flex-1 bg-[#C4562A] text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">{accountSaving ? "Saving…" : "Save Address"}</button></div>
+              <div className="flex gap-2"><button type="button" onClick={() => setEditingAddress(null)} className="flex-1 border border-border rounded-lg py-2 text-sm font-semibold">Cancel</button><button disabled={accountSaving} type="submit" className="flex-1 bg-[var(--brand-primary)] text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-50">{accountSaving ? "Saving…" : "Save Address"}</button></div>
             </form>}
           </div>
         )}
@@ -2437,27 +2450,25 @@ function AccountPage({ session, onSignOut }: { session: Session; onSignOut: () =
 // ─── ABOUT PAGE ────────────────────────────────────────────────────────────
 function AboutPage() {
   const { siteMedia, settings } = useStoreContent();
-  const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to learn more about your designs.");
-  const storeAddress = settingString(settings, "store_address");
+  const whatsappUrl = getWhatsAppUrl(settings, `Hello ${brandName}, I would like to learn more about your designs.`);
+  const storeAddress = settingString(settings, "store_address") || clientConfig.contact.address;
   const mapUrl = getGoogleMapsUrl(settings);
   return (
     <div className="min-h-screen pt-16" style={{ fontFamily: "var(--font-body)" }}>
       {/* Hero */}
       <div className="grid grid-cols-1 lg:grid-cols-2 min-h-[70vh]">
-        <div className="relative bg-[#1A1A18] flex items-center px-10 lg:px-16 py-16 lg:py-0">
+        <div className="relative bg-[var(--brand-foreground)] flex items-center px-10 lg:px-16 py-16 lg:py-0">
           <div className="relative z-10">
-            <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-4 font-semibold">Our Story</p>
+            <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-4 font-semibold">Our Story</p>
             <h1 className="text-white text-5xl font-bold leading-tight mb-6" style={{ fontFamily: "var(--font-display)" }}>
-              Sewn with<br />Love, Rooted<br />in <em className="text-[#C4562A]">Ghana.</em>
+              Sewn with<br />Love, Rooted<br />in <em className="text-[var(--brand-primary)]">{clientConfig.countryName}.</em>
             </h1>
             <p className="text-white/60 leading-relaxed max-w-sm">
-              Aunty Sala Fashion Gh was born in a small workshop in Accra's Osu district.
-              What began as one woman's passion for bringing African print fabrics into modern silhouettes
-              has grown into a beloved boutique serving clients across Ghana and the diaspora.
+              {brandName} is rooted in {clientConfig.city}. {clientConfig.description}
             </p>
           </div>
         </div>
-        <div className="relative overflow-hidden bg-[#E8E2D9] min-h-[50vh]">
+        <div className="relative overflow-hidden bg-[var(--brand-muted)] min-h-[50vh]">
           <ManagedImage src={siteMedia.about_story} alt="Seamstress at work" className="w-full h-full object-cover" />
         </div>
       </div>
@@ -2467,7 +2478,7 @@ function AboutPage() {
       {/* Brand Values */}
       <section className="py-20 px-6 lg:px-10 max-w-7xl mx-auto">
         <div className="text-center mb-14">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">What We Stand For</p>
+          <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">What We Stand For</p>
           <h2 className="text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Craftsmanship Values</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
@@ -2477,8 +2488,8 @@ function AboutPage() {
             { icon: Zap, title: "Contemporary Vision", body: "We honour tradition while pushing the silhouette forward. Our designs sit at the intersection of Ghanaian culture and global fashion sensibility." },
           ].map(({ icon: Icon, title, body }) => (
             <div key={title} className="text-center">
-              <div className="w-14 h-14 bg-[#C4562A]/10 rounded-2xl flex items-center justify-center mx-auto mb-5">
-                <Icon size={22} className="text-[#C4562A]" />
+              <div className="w-14 h-14 bg-[var(--brand-primary)]/10 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <Icon size={22} className="text-[var(--brand-primary)]" />
               </div>
               <h3 className="font-bold text-xl mb-3" style={{ fontFamily: "var(--font-display)" }}>{title}</h3>
               <p className="text-sm text-muted-foreground leading-relaxed">{body}</p>
@@ -2491,19 +2502,19 @@ function AboutPage() {
       <section className="bg-[#F0EAE0] py-16 px-6 lg:px-10">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div>
-            <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">The Atelier</p>
+            <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-3 font-semibold">The Atelier</p>
             <h2 className="text-4xl font-bold mb-5" style={{ fontFamily: "var(--font-display)" }}>Where Every Piece Comes to Life</h2>
             <p className="text-muted-foreground leading-relaxed mb-4">
-              Our Osu workshop is home to seven skilled seamstresses, each with over a decade of dressmaking experience.
-              Every garment is cut, sewn, and finished by hand — no mass production, ever.
+              Our {clientConfig.city} studio brings together skilled makers with years of dressmaking experience.
+              Every garment is thoughtfully cut, sewn, and finished.
             </p>
             <p className="text-muted-foreground leading-relaxed">
-              When you order from Aunty Sala, you're not just buying a dress. You're investing in Ghanaian craftsmanship,
-              supporting female artisans, and wearing something that was made with genuine love and intention.
+              When you order from {brandShortName}, you're investing in craftsmanship and wearing something
+              made with genuine care and intention.
             </p>
             {mapUrl && (
               <a href={mapUrl} target="_blank" rel="noreferrer"
-                className="inline-flex items-start gap-3 mt-6 text-sm font-semibold text-[#C4562A] hover:text-[#A8411B] transition-colors">
+                className="inline-flex items-start gap-3 mt-6 text-sm font-semibold text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)] transition-colors">
                 <MapPin size={20} className="shrink-0 mt-0.5" />
                 <span>
                   <span className="block text-xs uppercase tracking-wider text-muted-foreground mb-0.5">Visit our atelier</span>
@@ -2521,10 +2532,10 @@ function AboutPage() {
       </section>
 
       {whatsappUrl && (
-        <section className="px-6 lg:px-10 py-14 bg-[#FAF7F2]">
-          <div className="max-w-4xl mx-auto rounded-2xl bg-[#1A1A18] px-7 py-8 md:px-10 md:py-9 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <section className="px-6 lg:px-10 py-14 bg-[var(--brand-background)]">
+          <div className="max-w-4xl mx-auto rounded-2xl bg-[var(--brand-foreground)] px-7 py-8 md:px-10 md:py-9 flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <p className="text-[#B8922A] text-xs tracking-[0.25em] uppercase mb-2 font-semibold">Speak With Our Team</p>
+              <p className="text-[var(--brand-accent)] text-xs tracking-[0.25em] uppercase mb-2 font-semibold">Speak With Our Team</p>
               <h2 className="text-white text-2xl md:text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Have a design in mind?</h2>
               <p className="text-white/60 text-sm mt-2">Chat with us directly for sizing, fabrics, custom orders, or any questions.</p>
             </div>
@@ -2550,8 +2561,8 @@ function HelpPage({ section, setPage }: { section: HelpSection; setPage: (page: 
   };
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="bg-[#1A1A18] py-12 px-6 text-center">
-        <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Customer Care</p>
+      <div className="bg-[var(--brand-foreground)] py-12 px-6 text-center">
+        <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Customer Care</p>
         <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>{sectionTitles[section]}</h1>
       </div>
       <KenteStripe />
@@ -2566,7 +2577,7 @@ function HelpPage({ section, setPage }: { section: HelpSection; setPage: (page: 
         </>}
         {section === "fabric-care" && <>
           <p className="text-muted-foreground mb-6 leading-relaxed">Care instructions can vary by fabric and embellishment. Always follow the care label supplied with your garment.</p>
-          <div className="space-y-3">{["Hand wash or use a gentle machine cycle in cold water.","Wash strong colours separately and avoid bleach.","Air dry away from harsh direct sunlight; do not tumble dry.","Iron on low heat from the reverse side.","Use professional dry cleaning for structured, embellished, or kente pieces."].map((item) => <div key={item} className="flex gap-3 rounded-lg bg-[#F0EAE0] p-4 text-sm"><Check size={17} className="text-[#C4562A] shrink-0" />{item}</div>)}</div>
+          <div className="space-y-3">{["Hand wash or use a gentle machine cycle in cold water.","Wash strong colours separately and avoid bleach.","Air dry away from harsh direct sunlight; do not tumble dry.","Iron on low heat from the reverse side.","Use professional dry cleaning for structured, embellished, or kente pieces."].map((item) => <div key={item} className="flex gap-3 rounded-lg bg-[#F0EAE0] p-4 text-sm"><Check size={17} className="text-[var(--brand-primary)] shrink-0" />{item}</div>)}</div>
         </>}
         {section === "returns" && <>
           <p className="text-muted-foreground leading-relaxed mb-5">If there is a problem with your order, contact us promptly with your order number and clear photographs where relevant. Our team will confirm whether the item qualifies for a return, exchange, alteration, or repair.</p>
@@ -2586,10 +2597,10 @@ function HelpPage({ section, setPage }: { section: HelpSection; setPage: (page: 
             ["How do I choose the right size?", "Compare your body measurements with our sizing guide. Contact us if you fall between sizes."],
           ].map(([question, answer]) => <div key={question} className="rounded-xl border border-border p-5"><h2 className="font-bold mb-2">{question}</h2><p className="text-sm text-muted-foreground leading-relaxed">{answer}</p></div>)}
         </div>}
-        <div className="mt-10 rounded-xl bg-[#1A1A18] p-6 text-center">
+        <div className="mt-10 rounded-xl bg-[var(--brand-foreground)] p-6 text-center">
           <p className="text-white font-bold mb-2">Still need help?</p>
           <p className="text-white/60 text-sm mb-4">Our team can help with your order, measurements, or garment care.</p>
-          <button type="button" onClick={() => setPage("contact")} className="bg-[#C4562A] hover:bg-[#A8411B] text-white px-6 py-3 rounded-lg text-sm font-bold">Contact Us</button>
+          <button type="button" onClick={() => setPage("contact")} className="bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] text-white px-6 py-3 rounded-lg text-sm font-bold">Contact Us</button>
         </div>
       </div>
     </div>
@@ -2600,14 +2611,14 @@ type LegalPageKind = "privacy-policy" | "terms-of-service";
 
 function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: string) => void }) {
   const { settings } = useStoreContent();
-  const storeEmail = settingString(settings, "store_email");
+  const storeEmail = settingString(settings, "store_email") || clientConfig.contact.email;
   const updatedAt = "14 July 2026";
   const isPrivacy = kind === "privacy-policy";
 
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="bg-[#1A1A18] py-12 px-6 text-center">
-        <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Legal</p>
+      <div className="bg-[var(--brand-foreground)] py-12 px-6 text-center">
+        <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">Legal</p>
         <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
           {isPrivacy ? "Privacy Policy" : "Terms of Service"}
         </h1>
@@ -2620,7 +2631,7 @@ function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: str
           <div className="space-y-9">
             <section>
               <p className="text-muted-foreground leading-relaxed">
-                Aunty Sala Fashion Gh respects your privacy. This policy explains the personal information we collect when you visit our website, create an account, contact us, or place an order, and how we use and protect it.
+                {brandName} respects your privacy. This policy explains the personal information we collect when you visit our website, create an account, contact us, or place an order, and how we use and protect it.
               </p>
             </section>
 
@@ -2671,12 +2682,12 @@ function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: str
 
             <section>
               <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>5. International processing</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">Some providers may process information outside Ghana. Where this occurs, we take reasonable steps to use providers and safeguards appropriate to the information and applicable law.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">Some providers may process information outside {clientConfig.countryName}. Where this occurs, we take reasonable steps to use providers and safeguards appropriate to the information and applicable law.</p>
             </section>
 
             <section>
               <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>6. Your choices and rights</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">Subject to applicable law, including Ghana's Data Protection Act, 2012 (Act 843), you may ask to access, correct, update, object to certain processing of, or request deletion of your personal information. You may unsubscribe from marketing at any time. We may need to verify your identity and may retain information where the law permits or requires it.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">Subject to applicable law, including {clientConfig.legal.privacyLaw}, you may ask to access, correct, update, object to certain processing of, or request deletion of your personal information. You may unsubscribe from marketing at any time. We may need to verify your identity and may retain information where the law permits or requires it.</p>
             </section>
 
             <section>
@@ -2687,7 +2698,7 @@ function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: str
         ) : (
           <div className="space-y-9">
             <section>
-              <p className="text-muted-foreground leading-relaxed">These Terms of Service apply when you access the Aunty Sala Fashion Gh website, create an account, or purchase ready-to-wear or custom-made products. By using the store, you agree to these terms.</p>
+              <p className="text-muted-foreground leading-relaxed">These Terms of Service apply when you access the {brandName} website, create an account, or purchase ready-to-wear or custom-made products. By using the store, you agree to these terms.</p>
             </section>
 
             <section>
@@ -2716,12 +2727,12 @@ function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: str
             <section>
               <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>5. Returns, alterations, and refunds</h2>
               <p className="text-sm text-muted-foreground leading-relaxed">Our Returns Policy forms part of these terms. Made-to-measure, altered, or personalized items are normally not returnable unless faulty or materially different from the approved order. Contact us before returning anything so we can assess the issue and provide instructions.</p>
-              <button type="button" onClick={() => setPage("help-returns")} className="mt-3 text-sm font-bold text-[#C4562A] hover:text-[#A8411B]">Read the Returns Policy →</button>
+              <button type="button" onClick={() => setPage("help-returns")} className="mt-3 text-sm font-bold text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)]">Read the Returns Policy →</button>
             </section>
 
             <section>
               <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>6. Intellectual property and third-party services</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">The website's branding, text, original images, designs, and other content belong to Aunty Sala Fashion Gh or their respective owners and may not be copied or commercially reused without permission. Links and services provided by third parties are governed by their own terms and policies.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">The website's branding, text, original images, designs, and other content belong to {clientConfig.legalName} or their respective owners and may not be copied or commercially reused without permission. Links and services provided by third parties are governed by their own terms and policies.</p>
             </section>
 
             <section>
@@ -2731,7 +2742,7 @@ function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: str
 
             <section>
               <h2 className="text-2xl font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>8. Governing law and changes</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">These terms are governed by the laws of Ghana. We encourage you to contact us first so we can try to resolve any concern. We may update these terms from time to time; the version published when you place an order will apply to that order unless a change is required by law.</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">These terms are governed by the laws of {clientConfig.legal.jurisdiction}. We encourage you to contact us first so we can try to resolve any concern. We may update these terms from time to time; the version published when you place an order will apply to that order unless a change is required by law.</p>
             </section>
           </div>
         )}
@@ -2739,8 +2750,8 @@ function LegalPage({ kind, setPage }: { kind: LegalPageKind; setPage: (page: str
         <section className="mt-12 rounded-xl bg-[#F0EAE0] p-6">
           <h2 className="text-xl font-bold mb-2" style={{ fontFamily: "var(--font-display)" }}>Contact us</h2>
           <p className="text-sm text-muted-foreground leading-relaxed mb-4">Questions about {isPrivacy ? "your personal information or this policy" : "these terms or an order"} can be sent to our team.</p>
-          {storeEmail && <a href={`mailto:${storeEmail}`} className="block text-sm font-semibold text-[#C4562A] hover:text-[#A8411B] mb-3">{storeEmail}</a>}
-          <button type="button" onClick={() => setPage("contact")} className="bg-[#1A1A18] hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold">Contact Us</button>
+          {storeEmail && <a href={`mailto:${storeEmail}`} className="block text-sm font-semibold text-[var(--brand-primary)] hover:text-[var(--brand-primary-hover)] mb-3">{storeEmail}</a>}
+          <button type="button" onClick={() => setPage("contact")} className="bg-[var(--brand-foreground)] hover:bg-black text-white px-5 py-2.5 rounded-lg text-sm font-bold">Contact Us</button>
         </section>
       </article>
     </div>
@@ -2755,7 +2766,7 @@ function ContactPage() {
   const [sendError, setSendError] = useState("");
   const [contactTurnstileToken, setContactTurnstileToken] = useState("");
   const [contactTurnstileReset, setContactTurnstileReset] = useState(0);
-  const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
+  const whatsappUrl = getWhatsAppUrl(settings, `Hello ${brandName}, I would like to make an enquiry.`);
   const mapUrl = getGoogleMapsUrl(settings);
 
   const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -2786,10 +2797,10 @@ function ContactPage() {
   };
   return (
     <div className="min-h-screen pt-16 pb-20" style={{ fontFamily: "var(--font-body)" }}>
-      <div className="bg-[#1A1A18] min-h-[280px] md:min-h-[360px] px-6 text-center relative overflow-hidden flex items-center justify-center">
+      <div className="bg-[var(--brand-foreground)] min-h-[280px] md:min-h-[360px] px-6 text-center relative overflow-hidden flex items-center justify-center">
         <ManagedImage src={siteMedia.contact_banner} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15" />
         <div className="relative z-10">
-          <p className="text-[#B8922A] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">We'd Love to Hear From You</p>
+          <p className="text-[var(--brand-accent)] text-xs tracking-[0.3em] uppercase mb-2 font-semibold">We'd Love to Hear From You</p>
           <h1 className="text-white text-4xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Get in Touch</h1>
         </div>
       </div>
@@ -2811,27 +2822,27 @@ function ContactPage() {
                 {["Name","Email"].map(l => (
                   <div key={l}>
                     <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{l}</label>
-                    <input name={l.toLowerCase()} type={l === "Email" ? "email" : "text"} required className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]" />
+                    <input name={l.toLowerCase()} type={l === "Email" ? "email" : "text"} required className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
                   </div>
                 ))}
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Subject</label>
-                <select name="subject" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A]">
+                <select name="subject" className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)]">
                   <option>General Enquiry</option><option>Custom Order</option>
                   <option>Order Status</option><option>Returns &amp; Exchanges</option><option>Other</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Message</label>
-                <textarea name="message" required rows={5} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
+                <textarea name="message" required rows={5} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[var(--brand-primary)] resize-none" />
               </div>
               <TurnstileWidget
                 key={contactTurnstileReset}
                 onVerify={setContactTurnstileToken}
                 onError={setSendError}
               />
-              <button disabled={sending || !contactTurnstileToken} type="submit" className="w-full bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
+              <button disabled={sending || !contactTurnstileToken} type="submit" className="w-full bg-[var(--brand-primary)] disabled:opacity-50 hover:bg-[var(--brand-primary-hover)] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
                 {sending ? "Sending…" : "Send Message"} <Send size={15}/>
               </button>
               {sendError && <p role="alert" className="text-sm text-red-600">{sendError}</p>}
@@ -2849,8 +2860,8 @@ function ContactPage() {
               { icon: Clock, label: "Hours", value: String(settings.store_hours ?? "") }
             ].map(({ icon: Icon, label, value }) => (
               <div key={label} className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-[#C4562A]/10 rounded-lg flex items-center justify-center shrink-0">
-                  <Icon size={18} className="text-[#C4562A]" />
+                <div className="w-10 h-10 bg-[var(--brand-primary)]/10 rounded-lg flex items-center justify-center shrink-0">
+                  <Icon size={18} className="text-[var(--brand-primary)]" />
                 </div>
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{label}</p>
@@ -2875,12 +2886,12 @@ function ContactPage() {
           </div>}
 
           {/* Map placeholder */}
-          <div className="mt-6 rounded-xl overflow-hidden bg-[#E8E2D9] h-48 flex items-center justify-center relative">
+          <div className="mt-6 rounded-xl overflow-hidden bg-[var(--brand-muted)] h-48 flex items-center justify-center relative">
             <ManagedImage src={siteMedia.contact_location} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
             <div className="relative z-10 flex flex-col items-center">
-              <MapPin size={28} className="text-[#C4562A] mb-1" />
+              <MapPin size={28} className="text-[var(--brand-primary)] mb-1" />
               <p className="text-sm font-bold">{String(settings.store_address ?? "Location not configured")}</p>
-              {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="text-xs text-[#C4562A] hover:underline mt-1">View on Google Maps</a>}
+              {mapUrl && <a href={mapUrl} target="_blank" rel="noreferrer" className="text-xs text-[var(--brand-primary)] hover:underline mt-1">View on Google Maps</a>}
             </div>
           </div>
         </div>
@@ -2895,7 +2906,7 @@ const ADMIN_LINKS = [
   { key: "products", label: "Products", icon: ShoppingBag },
   { key: "archived-products", label: "Archived Products", icon: Archive },
   { key: "orders", label: "Orders", icon: Package },
-  { key: "custom-orders", label: "Tailoring Queue", icon: Scissors },
+  ...(clientConfig.features.customOrders ? [{ key: "custom-orders", label: "Tailoring Queue", icon: Scissors }] : []),
   { key: "customers", label: "Customers", icon: Users },
   { key: "analytics", label: "Analytics", icon: BarChart2 },
   { key: "notifications", label: "Notifications", icon: Bell },
@@ -2906,12 +2917,12 @@ const ADMIN_LINKS = [
 function AdminSidebar({ page, setPage, onExit, onLogout }:
   { page: string; setPage: (p: string) => void; onExit: () => void; onLogout: () => Promise<void> }) {
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-60 shrink-0 flex-col overflow-hidden bg-[#1A1A18] text-[#FAF7F2] shadow-[8px_0_30px_rgba(26,26,24,0.08)]">
+    <aside className="fixed inset-y-0 left-0 z-40 flex h-screen h-dvh w-60 shrink-0 flex-col overflow-hidden bg-[var(--brand-foreground)] text-[var(--brand-background)] shadow-[8px_0_30px_rgba(26,26,24,0.08)]">
       <div className="px-5 py-4 border-b border-white/8 flex items-center gap-3">
-        <img src="/aunty-sala-logo.png" alt="Aunty Sala Fashion Gh logo" className="h-12 w-auto object-contain" />
+        <img src={clientConfig.assets.logo} alt={`${brandName} logo`} className="h-12 w-auto object-contain" />
         <div>
-          <p className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Aunty Sala</p>
-          <p className="text-[10px] tracking-[0.25em] uppercase text-[#B8922A] font-medium">Admin Portal</p>
+          <p className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>{brandShortName}</p>
+          <p className="text-[10px] tracking-[0.25em] uppercase text-[var(--brand-accent)] font-medium">Admin Portal</p>
         </div>
       </div>
       <nav aria-label="Admin navigation" className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 py-4 overscroll-contain">
@@ -2919,18 +2930,18 @@ function AdminSidebar({ page, setPage, onExit, onLogout }:
           const active = page === key;
           return (
             <button key={key} type="button" onClick={() => setPage(key)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? "bg-[#B8922A]/15 text-[#B8922A]" : "hover:bg-white/5 text-[#FAF7F2]/70 hover:text-[#FAF7F2]"}`}>
-              <Icon size={16} className={active ? "text-[#B8922A]" : ""} />
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? "bg-[var(--brand-accent)]/15 text-[var(--brand-accent)]" : "hover:bg-white/5 text-[var(--brand-background)]/70 hover:text-[var(--brand-background)]"}`}>
+              <Icon size={16} className={active ? "text-[var(--brand-accent)]" : ""} />
               {label}
             </button>
           );
         })}
       </nav>
       <div className="px-3 pb-5 border-t border-white/8 pt-4 space-y-1">
-        <button type="button" onClick={onExit} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/50 hover:text-[#FAF7F2]/80 transition-colors">
+        <button type="button" onClick={onExit} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--brand-background)]/50 hover:text-[var(--brand-background)]/80 transition-colors">
           <Home size={15} /> Back to Store
         </button>
-        <button type="button" onClick={() => void onLogout()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[#FAF7F2]/70 hover:bg-red-500/10 hover:text-red-300 transition-colors">
+        <button type="button" onClick={() => void onLogout()} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-[var(--brand-background)]/70 hover:bg-red-500/10 hover:text-red-300 transition-colors">
           <LogOut size={15} /> Log Out
         </button>
       </div>
@@ -3013,7 +3024,7 @@ function AdminDateRangeFilter({ filter }: { filter: ReturnType<typeof useAdminDa
       <div className="flex flex-wrap gap-2">
         {options.map((option) => (
           <button key={option.key} type="button" onClick={() => filter.setPreset(option.key)}
-            className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${filter.preset === option.key ? "bg-[#1A1A18] border-[#1A1A18] text-white" : "bg-card border-border hover:border-[#C4562A]"}`}>
+            className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${filter.preset === option.key ? "bg-[var(--brand-foreground)] border-[var(--brand-foreground)] text-white" : "bg-card border-border hover:border-[var(--brand-primary)]"}`}>
             {option.label}
           </button>
         ))}
@@ -3114,8 +3125,8 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
           <div key={m.label} className="bg-card rounded-xl p-5 border border-border/50 shadow-sm">
             <div className="flex items-start justify-between mb-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{m.label}</p>
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${m.up ? "bg-[#C4562A]/10" : "bg-amber-50"}`}>
-                <m.icon size={16} className={m.up ? "text-[#C4562A]" : "text-amber-600"} />
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${m.up ? "bg-[var(--brand-primary)]/10" : "bg-amber-50"}`}>
+                <m.icon size={16} className={m.up ? "text-[var(--brand-primary)]" : "text-amber-600"} />
               </div>
             </div>
             <p className="text-2xl font-bold mb-1">{m.value}</p>
@@ -3135,15 +3146,15 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
             <AreaChart data={SALES_DATA}>
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#C4562A" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#C4562A" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="var(--brand-primary)" stopOpacity={0.2}/>
+                  <stop offset="95%" stopColor="var(--brand-primary)" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => [`GH₵ ${v.toLocaleString()}`, "Revenue"]} />
-              <Area type="monotone" dataKey="revenue" stroke="#C4562A" strokeWidth={2} fill="url(#revGrad)" />
+              <Tooltip formatter={(v: number) => [ghs(v), "Revenue"]} />
+              <Area type="monotone" dataKey="revenue" stroke="var(--brand-primary)" strokeWidth={2} fill="url(#revGrad)" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -3175,7 +3186,7 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
       <div className="bg-card rounded-xl border border-border/50 shadow-sm">
         <div className="flex justify-between items-center px-6 py-4 border-b border-border">
           <h2 className="font-bold text-base" style={{ fontFamily: "var(--font-display)" }}>Recent Orders</h2>
-          <button onClick={() => setPage("orders")} className="text-xs text-[#C4562A] font-semibold hover:underline">View all</button>
+          <button onClick={() => setPage("orders")} className="text-xs text-[var(--brand-primary)] font-semibold hover:underline">View all</button>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -3189,7 +3200,7 @@ function AdminDashboard({ setPage }: { setPage: (p: string) => void }) {
             <tbody>
               {ORDERS_DATA.slice(0,5).map(o => (
                 <tr key={o.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  <td className="px-6 py-3.5 font-mono text-xs font-bold text-[#C4562A]">{o.id}</td>
+                  <td className="px-6 py-3.5 font-mono text-xs font-bold text-[var(--brand-primary)]">{o.id}</td>
                   <td className="px-6 py-3.5 font-medium">{o.customer}</td>
                   <td className="px-6 py-3.5 text-muted-foreground max-w-[180px] truncate">{o.items}</td>
                   <td className="px-6 py-3.5 font-bold">{ghs(o.amount)}</td>
@@ -3349,7 +3360,7 @@ function AdminProducts() {
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Products</h1>
           <p className="text-muted-foreground text-sm mt-1">{activeProducts.length} active product{activeProducts.length === 1 ? "" : "s"}</p>
         </div>
-        <button onClick={openNewProduct} className="bg-[#C4562A] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
+        <button onClick={openNewProduct} className="bg-[var(--brand-primary)] text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors flex items-center gap-2">
           <Plus size={15}/> Add Product
         </button>
       </div>
@@ -3360,34 +3371,34 @@ function AdminProducts() {
         <form onSubmit={handleCreateProduct} className="bg-card rounded-xl p-6 border border-border/50 shadow-sm mb-6">
           <div className="flex justify-between mb-5">
             <h2 className="font-bold text-lg" style={{ fontFamily: "var(--font-display)" }}>{editingProduct ? "Edit Product" : "New Product"}</h2>
-            <button type="button" onClick={() => { resetProductForm(); setShowForm(false); }} className="text-muted-foreground hover:text-[#1A1A18]"><X size={18}/></button>
+            <button type="button" onClick={() => { resetProductForm(); setShowForm(false); }} className="text-muted-foreground hover:text-[var(--brand-foreground)]"><X size={18}/></button>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
-              ["name", "Product Name", "text"], ["sku", "SKU", "text"], ["price", "Price (GH₵)", "number"],
+              ["name", "Product Name", "text"], ["sku", "SKU", "text"], ["price", `Price (${clientConfig.currency})`, "number"],
               ["stock", "Stock Qty", "number"],
               ["sizes", "Sizes (comma-separated)", "text"], ["colors", "Colours (comma-separated)", "text"],
             ].map(([field, label, type]) => (
               <div key={field}>
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">{label}</label>
-                <input required={!['sizes', 'colors'].includes(field)} type={type} min={type === "number" ? "0" : undefined} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductField(field as keyof typeof productForm, event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]" />
+                <input required={!['sizes', 'colors'].includes(field)} type={type} min={type === "number" ? "0" : undefined} value={productForm[field as keyof typeof productForm]} onChange={(event) => setProductField(field as keyof typeof productForm, event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
               </div>
             ))}
             <div>
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category</label>
-                <button type="button" onClick={() => { setShowNewCategory((current) => !current); setCategoryError(""); }} className="text-xs font-semibold text-[#C4562A] hover:underline flex items-center gap-1">
+                <button type="button" onClick={() => { setShowNewCategory((current) => !current); setCategoryError(""); }} className="text-xs font-semibold text-[var(--brand-primary)] hover:underline flex items-center gap-1">
                   <Plus size={12}/> Add new
                 </button>
               </div>
-              <select required value={productForm.category} onChange={(event) => setProductField("category", event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+              <select required value={productForm.category} onChange={(event) => setProductField("category", event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]">
                 <option value="" disabled>Select category</option>
                 {availableCategories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
               </select>
               {showNewCategory && (
                 <div className="mt-2 flex gap-2">
-                  <input autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="New category" className="min-w-0 flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C4562A]" />
-                  <button type="button" disabled={categorySaving || !newCategoryName.trim()} onClick={() => void handleCreateCategory()} className="bg-[#1A1A18] disabled:opacity-50 text-white px-3 rounded-lg text-xs font-semibold">{categorySaving ? "Adding…" : "Add"}</button>
+                  <input autoFocus value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="New category" className="min-w-0 flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
+                  <button type="button" disabled={categorySaving || !newCategoryName.trim()} onClick={() => void handleCreateCategory()} className="bg-[var(--brand-foreground)] disabled:opacity-50 text-white px-3 rounded-lg text-xs font-semibold">{categorySaving ? "Adding…" : "Add"}</button>
                 </div>
               )}
               {categoryError && <p role="alert" className="mt-1.5 text-xs text-red-600">{categoryError}</p>}
@@ -3395,24 +3406,24 @@ function AdminProducts() {
             <div>
               <div className="flex items-center justify-between gap-2 mb-1.5">
                 <label className="block text-xs font-semibold uppercase tracking-wide text-muted-foreground">Fabric</label>
-                <button type="button" onClick={() => setShowNewFabric((current) => !current)} className="text-xs font-semibold text-[#C4562A] hover:underline flex items-center gap-1">
+                <button type="button" onClick={() => setShowNewFabric((current) => !current)} className="text-xs font-semibold text-[var(--brand-primary)] hover:underline flex items-center gap-1">
                   <Plus size={12}/> Add new
                 </button>
               </div>
-              <select required value={productForm.fabric} onChange={(event) => setProductField("fabric", event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[#C4562A]">
+              <select required value={productForm.fabric} onChange={(event) => setProductField("fabric", event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm bg-card focus:outline-none focus:border-[var(--brand-primary)]">
                 <option value="" disabled>Select fabric</option>
                 {availableFabrics.map((fabric) => <option key={fabric} value={fabric}>{fabric}</option>)}
               </select>
               {showNewFabric && (
                 <div className="mt-2 flex gap-2">
-                  <input autoFocus value={newFabricName} onChange={(event) => setNewFabricName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleAddFabric(); } }} placeholder="New fabric" className="min-w-0 flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#C4562A]" />
-                  <button type="button" disabled={!newFabricName.trim()} onClick={handleAddFabric} className="bg-[#1A1A18] disabled:opacity-50 text-white px-3 rounded-lg text-xs font-semibold">Add</button>
+                  <input autoFocus value={newFabricName} onChange={(event) => setNewFabricName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); handleAddFabric(); } }} placeholder="New fabric" className="min-w-0 flex-1 border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
+                  <button type="button" disabled={!newFabricName.trim()} onClick={handleAddFabric} className="bg-[var(--brand-foreground)] disabled:opacity-50 text-white px-3 rounded-lg text-xs font-semibold">Add</button>
                 </div>
               )}
             </div>
             <div className="col-span-2 md:col-span-3">
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Description</label>
-              <textarea required value={productForm.description} onChange={(event) => setProductField("description", event.target.value)} rows={3} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
+              <textarea required value={productForm.description} onChange={(event) => setProductField("description", event.target.value)} rows={3} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--brand-primary)] resize-none" />
             </div>
             <div className="col-span-2 md:col-span-3">
               <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Product media</label>
@@ -3435,9 +3446,9 @@ function AdminProducts() {
                     </div>
                   ))}
                   {productFilePreviews.map(({ file, url }, index) => (
-                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-[3/4] overflow-hidden rounded-xl border-2 border-[#C4562A]/35 bg-muted group">
+                    <div key={`${file.name}-${file.lastModified}-${index}`} className="relative aspect-[3/4] overflow-hidden rounded-xl border-2 border-[var(--brand-primary)]/35 bg-muted group">
                       <img src={url} alt={`New upload preview ${index + 1}`} className="w-full h-full object-cover" />
-                      <span className="absolute bottom-2 left-2 rounded bg-[#C4562A] px-2 py-1 text-[10px] font-semibold text-white">New</span>
+                      <span className="absolute bottom-2 left-2 rounded bg-[var(--brand-primary)] px-2 py-1 text-[10px] font-semibold text-white">New</span>
                       <button
                         type="button"
                         disabled={productMediaCount <= 1}
@@ -3452,7 +3463,7 @@ function AdminProducts() {
                   ))}
                 </div>
               )}
-              <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg px-4 py-6 text-sm text-muted-foreground cursor-pointer hover:border-[#C4562A]">
+              <label className="flex items-center justify-center gap-2 border-2 border-dashed border-border rounded-lg px-4 py-6 text-sm text-muted-foreground cursor-pointer hover:border-[var(--brand-primary)]">
                 <input required={productMediaCount === 0} type="file" accept="image/*" multiple className="sr-only" onChange={(event) => {
                   const selectedFiles = Array.from(event.target.files ?? []);
                   setProductFiles((current) => [...current, ...selectedFiles]);
@@ -3466,7 +3477,7 @@ function AdminProducts() {
           {saveError && <p role="alert" className="mt-4 text-sm text-red-600">{saveError}</p>}
           <div className="mt-4 flex gap-3">
             <button type="button" onClick={() => { resetProductForm(); setShowForm(false); }} className="border border-border px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors">Cancel</button>
-            <button disabled={saving || productMediaCount === 0} type="submit" className="bg-[#C4562A] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{saving ? "Uploading & saving…" : editingProduct ? "Update Product" : "Save Product"}</button>
+            <button disabled={saving || productMediaCount === 0} type="submit" className="bg-[var(--brand-primary)] disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors">{saving ? "Uploading & saving…" : editingProduct ? "Update Product" : "Save Product"}</button>
           </div>
         </form>
       )}
@@ -3476,7 +3487,7 @@ function AdminProducts() {
           <div className="relative flex-1 max-w-xs">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search products..." className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[#C4562A]" />
+              placeholder="Search products..." className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -3493,16 +3504,16 @@ function AdminProducts() {
                 <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <img src={p.images[0]} alt={p.name} className="w-10 h-12 rounded-lg object-cover bg-[#E8E2D9]" />
+                      <img src={p.images[0]} alt={p.name} className="w-10 h-12 rounded-lg object-cover bg-[var(--brand-muted)]" />
                       <div>
                         <p className="font-semibold">{p.name}</p>
-                        {p.badge && <span className="text-[10px] bg-[#C4562A] text-white px-1.5 py-0.5 rounded font-bold">{p.badge}</span>}
+                        {p.badge && <span className="text-[10px] bg-[var(--brand-primary)] text-white px-1.5 py-0.5 rounded font-bold">{p.badge}</span>}
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-muted-foreground">{p.fabric}</td>
                   <td className="px-6 py-4 text-muted-foreground">{p.category}</td>
-                  <td className="px-6 py-4 font-bold text-[#C4562A]">{ghs(p.price)}</td>
+                  <td className="px-6 py-4 font-bold text-[var(--brand-primary)]">{ghs(p.price)}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${!p.isActive ? "bg-gray-100 text-gray-600" : p.inStock ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
                       {!p.isActive ? "Archived" : p.inStock ? "In Stock" : "Out of Stock"}
@@ -3510,8 +3521,8 @@ function AdminProducts() {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <button onClick={() => openEditProduct(p)} aria-label={`Edit ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#1A1A18]"><Edit size={14}/></button>
-                      {p.isActive && <button onClick={() => window.open(`/product/${p.slug}`, "_blank", "noopener,noreferrer")} aria-label={`View ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[#C4562A]"><Eye size={14}/></button>}
+                      <button onClick={() => openEditProduct(p)} aria-label={`Edit ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[var(--brand-foreground)]"><Edit size={14}/></button>
+                      {p.isActive && <button onClick={() => window.open(`/product/${p.slug}`, "_blank", "noopener,noreferrer")} aria-label={`View ${p.name}`} className="p-1.5 hover:bg-muted rounded transition-colors text-muted-foreground hover:text-[var(--brand-primary)]"><Eye size={14}/></button>}
                       <button onClick={() => void handleArchiveProduct(p)} aria-label={`Archive ${p.name}`} className="p-1.5 hover:bg-red-50 rounded transition-colors text-muted-foreground hover:text-red-600"><Trash2 size={14}/></button>
                     </div>
                   </td>
@@ -3559,7 +3570,7 @@ function AdminArchivedProducts({ setPage }: { setPage: (page: string) => void })
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Archived Products</h1>
           <p className="text-muted-foreground text-sm mt-1">{archivedProducts.length} archived product{archivedProducts.length === 1 ? "" : "s"}</p>
         </div>
-        <button type="button" onClick={() => setPage("products")} className="border border-border bg-card px-4 py-2.5 rounded-lg text-sm font-semibold hover:border-[#C4562A] hover:text-[#C4562A] transition-colors">
+        <button type="button" onClick={() => setPage("products")} className="border border-border bg-card px-4 py-2.5 rounded-lg text-sm font-semibold hover:border-[var(--brand-primary)] hover:text-[var(--brand-primary)] transition-colors">
           Back to Products
         </button>
       </div>
@@ -3571,7 +3582,7 @@ function AdminArchivedProducts({ setPage }: { setPage: (page: string) => void })
         <div className="px-6 py-4 border-b border-border">
           <div className="relative max-w-sm">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search archived products…" className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[#C4562A]" />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search archived products…" className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
           </div>
         </div>
 
@@ -3594,17 +3605,17 @@ function AdminArchivedProducts({ setPage }: { setPage: (page: string) => void })
                   <tr key={product.id} className="border-b border-border/50 last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3 min-w-[220px]">
-                        <img src={product.images[0]} alt="" className="w-12 h-14 rounded-lg object-cover bg-[#E8E2D9] grayscale-[20%]" />
+                        <img src={product.images[0]} alt="" className="w-12 h-14 rounded-lg object-cover bg-[var(--brand-muted)] grayscale-[20%]" />
                         <div><p className="font-semibold">{product.name}</p><span className="inline-block mt-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">Archived</span></div>
                       </div>
                     </td>
                     <td className="px-6 py-4 font-mono text-xs text-muted-foreground">{product.sku}</td>
                     <td className="px-6 py-4 text-muted-foreground">{product.fabric}</td>
                     <td className="px-6 py-4 text-muted-foreground">{product.category}</td>
-                    <td className="px-6 py-4 font-bold text-[#C4562A]">{ghs(product.price)}</td>
+                    <td className="px-6 py-4 font-bold text-[var(--brand-primary)]">{ghs(product.price)}</td>
                     <td className="px-6 py-4 text-muted-foreground">{product.inventoryQuantity}</td>
                     <td className="px-6 py-4">
-                      <button type="button" disabled={restoringId === product.id} onClick={() => void handleRestore(product)} className="rounded-lg bg-[#1A1A18] px-4 py-2 text-xs font-semibold text-white hover:bg-[#C4562A] disabled:opacity-50 transition-colors">
+                      <button type="button" disabled={restoringId === product.id} onClick={() => void handleRestore(product)} className="rounded-lg bg-[var(--brand-foreground)] px-4 py-2 text-xs font-semibold text-white hover:bg-[var(--brand-primary)] disabled:opacity-50 transition-colors">
                         {restoringId === product.id ? "Restoring…" : "Restore"}
                       </button>
                     </td>
@@ -3703,7 +3714,7 @@ function AdminOrders() {
       <div className="flex gap-2 mb-6 flex-wrap">
         {statuses.map(s => (
           <button key={s} onClick={() => setFilter(s)}
-            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filter === s ? "bg-[#C4562A] text-white border-[#C4562A]" : "border-border hover:border-[#C4562A]"}`}>
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filter === s ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-border hover:border-[var(--brand-primary)]"}`}>
             {s}
           </button>
         ))}
@@ -3724,7 +3735,7 @@ function AdminOrders() {
               ["custom", "Custom Range"],
             ].map(([key, label]) => (
               <button key={key} type="button" onClick={() => setDatePreset(key as typeof datePreset)}
-                className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${datePreset === key ? "bg-[#1A1A18] border-[#1A1A18] text-white" : "border-border hover:border-[#C4562A]"}`}>
+                className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-colors ${datePreset === key ? "bg-[var(--brand-foreground)] border-[var(--brand-foreground)] text-white" : "border-border hover:border-[var(--brand-primary)]"}`}>
                 {label}
               </button>
             ))}
@@ -3752,10 +3763,10 @@ function AdminOrders() {
               <tbody>
                 {filtered.map(o => (
                   <tr key={o.id} onClick={() => selectOrder(o)}
-                    className={`border-b border-border/50 cursor-pointer transition-colors ${selected?.id === o.id ? "bg-[#C4562A]/5" : "hover:bg-muted/30"}`}>
+                    className={`border-b border-border/50 cursor-pointer transition-colors ${selected?.id === o.id ? "bg-[var(--brand-primary)]/5" : "hover:bg-muted/30"}`}>
                     <td className="px-5 py-3.5">
-                      <span className="font-mono text-xs font-bold text-[#C4562A]">{o.id}</span>
-                      {o.custom && <span className="ml-1.5 text-[9px] bg-[#B8922A] text-white px-1.5 py-0.5 rounded font-bold">CUSTOM</span>}
+                      <span className="font-mono text-xs font-bold text-[var(--brand-primary)]">{o.id}</span>
+                      {o.custom && <span className="ml-1.5 text-[9px] bg-[var(--brand-accent)] text-white px-1.5 py-0.5 rounded font-bold">CUSTOM</span>}
                     </td>
                     <td className="px-5 py-3.5 font-medium">{o.customer}</td>
                     <td className="px-5 py-3.5 font-bold">{ghs(o.amount)}</td>
@@ -3773,15 +3784,15 @@ function AdminOrders() {
         <div className="lg:col-span-2">
           {selected ? (
             <div className="bg-card rounded-2xl border border-border/50 shadow-sm overflow-hidden">
-              <div className="flex justify-between items-start gap-4 px-6 py-5 border-b border-border bg-gradient-to-br from-[#C4562A]/8 to-transparent">
+              <div className="flex justify-between items-start gap-4 px-6 py-5 border-b border-border bg-gradient-to-br from-[var(--brand-primary)]/8 to-transparent">
                 <div>
                   <div className="flex flex-wrap items-center gap-2 mb-1">
-                    <p className="font-mono text-base font-bold text-[#C4562A]">{selected.id}</p>
+                    <p className="font-mono text-base font-bold text-[var(--brand-primary)]">{selected.id}</p>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColor[selected.status]}`}>{selected.status}</span>
                   </div>
                   <p className="text-muted-foreground text-xs flex items-center gap-1.5"><Calendar size={12}/>{selected.date}</p>
                 </div>
-                <button onClick={() => setSelected(null)} aria-label="Close order details" className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-[#1A1A18] hover:bg-black/5 transition-colors"><X size={17}/></button>
+                <button onClick={() => setSelected(null)} aria-label="Close order details" className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-[var(--brand-foreground)] hover:bg-black/5 transition-colors"><X size={17}/></button>
               </div>
 
               <div className="p-6">
@@ -3790,24 +3801,24 @@ function AdminOrders() {
                     <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Customer</p>
                     <p className="font-semibold text-sm truncate" title={selected.customer}>{selected.customer}</p>
                   </div>
-                  <div className="rounded-xl bg-[#C4562A]/8 p-4 text-right">
+                  <div className="rounded-xl bg-[var(--brand-primary)]/8 p-4 text-right">
                     <p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Order Total</p>
-                    <p className="font-bold text-lg text-[#C4562A]">{ghs(selected.amount)}</p>
+                    <p className="font-bold text-lg text-[var(--brand-primary)]">{ghs(selected.amount)}</p>
                   </div>
                 </div>
 
                 <div className="mb-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Order Items</h3>
-                    <span className="text-xs font-semibold text-[#C4562A]">{selected.itemDetails.reduce((sum, item) => sum + item.quantity, 0)} item{selected.itemDetails.reduce((sum, item) => sum + item.quantity, 0) === 1 ? "" : "s"}</span>
+                    <span className="text-xs font-semibold text-[var(--brand-primary)]">{selected.itemDetails.reduce((sum, item) => sum + item.quantity, 0)} item{selected.itemDetails.reduce((sum, item) => sum + item.quantity, 0) === 1 ? "" : "s"}</span>
                   </div>
                   <div className="space-y-3">
                     {selected.itemDetails.map((item, index) => (
                       <article key={`${item.sku}-${index}`} className="rounded-xl border border-border/70 p-3 flex gap-3 bg-white/60">
                         {item.imageUrl ? (
-                          <img src={item.imageUrl} alt={item.name} className="w-14 h-[68px] rounded-lg object-cover bg-[#E8E2D9] shrink-0" />
+                          <img src={item.imageUrl} alt={item.name} className="w-14 h-[68px] rounded-lg object-cover bg-[var(--brand-muted)] shrink-0" />
                         ) : (
-                          <div className="w-14 h-[68px] rounded-lg bg-[#E8E2D9] flex items-center justify-center shrink-0"><ShoppingBag size={19} className="text-muted-foreground/50" /></div>
+                          <div className="w-14 h-[68px] rounded-lg bg-[var(--brand-muted)] flex items-center justify-center shrink-0"><ShoppingBag size={19} className="text-muted-foreground/50" /></div>
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
@@ -3815,14 +3826,14 @@ function AdminOrders() {
                               <p className="font-semibold text-sm leading-snug">{item.name}</p>
                               <p className="text-[10px] text-muted-foreground mt-0.5">{item.sku} · {item.fabric} · {item.category}</p>
                             </div>
-                            <span className="shrink-0 rounded-full bg-[#1A1A18] text-white text-[10px] font-bold px-2 py-1">×{item.quantity}</span>
+                            <span className="shrink-0 rounded-full bg-[var(--brand-foreground)] text-white text-[10px] font-bold px-2 py-1">×{item.quantity}</span>
                           </div>
                           <div className="flex flex-wrap items-end justify-between gap-2 mt-2">
                             <div className="flex flex-wrap gap-1.5">
                               {item.size && <span className="rounded bg-[#F0EAE0] px-2 py-1 text-[10px] font-semibold">Size {item.size}</span>}
                               {item.color && <span className="rounded bg-[#F0EAE0] px-2 py-1 text-[10px] font-semibold">{item.color}</span>}
                             </div>
-                            <p className="text-xs font-bold text-[#C4562A]">{ghs(item.unitPrice * item.quantity)}</p>
+                            <p className="text-xs font-bold text-[var(--brand-primary)]">{ghs(item.unitPrice * item.quantity)}</p>
                           </div>
                         </div>
                       </article>
@@ -3832,7 +3843,7 @@ function AdminOrders() {
 
                 <div className="border-t border-border pt-5 mb-4">
                 <label className="block text-xs font-semibold mb-2 uppercase tracking-wide text-muted-foreground">Update Status</label>
-                <select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[#C4562A]">
+                <select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)} className="w-full border border-border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-[var(--brand-primary)]">
                   {statuses.filter((status) => status !== "All").map((status) => (
                     <option key={status} disabled={(status === "Paid" && selected.status === "Draft (not paid)") || (status === "Draft (not paid)" && selected.status !== "Draft (not paid)")}>
                       {status}
@@ -3842,7 +3853,7 @@ function AdminOrders() {
                 {selected.status === "Draft (not paid)" && <p className="text-xs text-muted-foreground mt-2">Paid is set automatically after Paystack verifies the payment.</p>}
                 </div>
                 <div className="flex gap-2">
-                  <button disabled={statusSaving || selectedStatus === selected.status} onClick={() => void handleStatusSave()} className="flex-1 bg-[#C4562A] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors">{statusSaving ? "Saving…" : "Save Status"}</button>
+                  <button disabled={statusSaving || selectedStatus === selected.status} onClick={() => void handleStatusSave()} className="flex-1 bg-[var(--brand-primary)] disabled:opacity-50 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors">{statusSaving ? "Saving…" : "Save Status"}</button>
                   <button onClick={() => window.print()} aria-label={`Print ${selected.id}`} className="p-2.5 border border-border rounded-lg hover:bg-muted transition-colors"><Printer size={15}/></button>
                 </div>
                 {statusMessage && <p role="status" className="mt-3 text-xs text-muted-foreground">{statusMessage}</p>}
@@ -3951,7 +3962,7 @@ function AdminCustomOrders() {
                 setDraggedId(null);
                 if (id) void moveItem(id, col.key);
               }}
-              className={`w-56 rounded-xl border shadow-sm flex flex-col transition-colors ${dropColumn === col.key ? "bg-[#C4562A]/5 border-[#C4562A]" : "bg-card border-border/50"}`}>
+              className={`w-56 rounded-xl border shadow-sm flex flex-col transition-colors ${dropColumn === col.key ? "bg-[var(--brand-primary)]/5 border-[var(--brand-primary)]" : "bg-card border-border/50"}`}>
               <div className="px-4 py-3 border-b border-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${col.color.includes("blue") ? "bg-blue-500" : col.color.includes("yellow") ? "bg-yellow-500" : col.color.includes("orange") ? "bg-orange-500" : col.color.includes("purple") ? "bg-purple-500" : col.color.includes("pink") ? "bg-pink-500" : "bg-green-500"}`} />
@@ -3976,8 +3987,8 @@ function AdminCustomOrders() {
                     onClick={() => { if (!draggedRef.current) setSelected(item); }}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelected(item); } }}
                     role="button" tabIndex={0} aria-label={`View ${item.reference} details`}
-                    className={`bg-background border rounded-lg p-3 shadow-sm cursor-grab active:cursor-grabbing transition-all focus:outline-none focus:ring-2 focus:ring-[#C4562A]/40 ${draggedId === item.id ? "opacity-40 scale-[0.98]" : "border-border/60 hover:border-[#C4562A]/50 hover:shadow-md"}`}>
-                    <p className="font-mono text-[10px] text-[#C4562A] font-bold mb-1">{item.reference}</p>
+                    className={`bg-background border rounded-lg p-3 shadow-sm cursor-grab active:cursor-grabbing transition-all focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]/40 ${draggedId === item.id ? "opacity-40 scale-[0.98]" : "border-border/60 hover:border-[var(--brand-primary)]/50 hover:shadow-md"}`}>
+                    <p className="font-mono text-[10px] text-[var(--brand-primary)] font-bold mb-1">{item.reference}</p>
                     <p className="font-semibold text-xs leading-snug mb-1">{item.name}</p>
                     <p className="text-[11px] text-muted-foreground leading-snug mb-2">{item.item}</p>
                     <div className="flex items-center justify-between">
@@ -3985,14 +3996,14 @@ function AdminCustomOrders() {
                       <select disabled={savingId === item.id} value={item.col}
                         onClick={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}
                         onChange={e => void moveItem(item.id, e.target.value)}
-                        className="text-[10px] border border-border rounded px-1.5 py-0.5 focus:outline-none focus:border-[#C4562A] bg-card">
+                        className="text-[10px] border border-border rounded px-1.5 py-0.5 focus:outline-none focus:border-[var(--brand-primary)] bg-card">
                         {KANBAN_COLS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
                       </select>
                     </div>
                   </div>
                 ))}
                 {byCol(col.key).length === 0 && (
-                  <div className={`border-2 border-dashed rounded-lg h-20 flex items-center justify-center transition-colors ${dropColumn === col.key ? "border-[#C4562A] text-[#C4562A]" : "border-border text-muted-foreground"}`}>
+                  <div className={`border-2 border-dashed rounded-lg h-20 flex items-center justify-center transition-colors ${dropColumn === col.key ? "border-[var(--brand-primary)] text-[var(--brand-primary)]" : "border-border text-muted-foreground"}`}>
                     <span className="text-xs">{dropColumn === col.key ? "Drop here" : "Empty"}</span>
                   </div>
                 )}
@@ -4005,8 +4016,8 @@ function AdminCustomOrders() {
       {selected && (
         <div className="fixed inset-0 z-[100] bg-black/45 backdrop-blur-sm p-4 md:p-8 flex items-center justify-center" onMouseDown={() => setSelected(null)}>
           <section role="dialog" aria-modal="true" aria-labelledby="custom-order-detail-title" onMouseDown={(event) => event.stopPropagation()}
-            className="bg-[#FAF7F2] rounded-2xl shadow-2xl border border-white/30 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-[#1A1A18] text-white px-6 py-5 flex items-start justify-between gap-4">
+            className="bg-[var(--brand-background)] rounded-2xl shadow-2xl border border-white/30 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-[var(--brand-foreground)] text-white px-6 py-5 flex items-start justify-between gap-4">
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   <h2 id="custom-order-detail-title" className="font-mono text-lg font-bold text-[#D6B450]">{selected.reference}</h2>
@@ -4020,8 +4031,8 @@ function AdminCustomOrders() {
             <div className="p-6 md:p-8 space-y-7">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="rounded-xl border border-border bg-card p-4"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Customer</p><p className="font-bold">{selected.name}</p></div>
-                <a href={`mailto:${selected.email}`} className="rounded-xl border border-border bg-card p-4 hover:border-[#C4562A] transition-colors"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Email</p><p className="font-semibold text-sm break-all">{selected.email}</p></a>
-                <a href={`tel:${selected.phone.replace(/[^\d+]/g, "")}`} className="rounded-xl border border-border bg-card p-4 hover:border-[#C4562A] transition-colors"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Phone</p><p className="font-semibold text-sm">{selected.phone}</p></a>
+                <a href={`mailto:${selected.email}`} className="rounded-xl border border-border bg-card p-4 hover:border-[var(--brand-primary)] transition-colors"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Email</p><p className="font-semibold text-sm break-all">{selected.email}</p></a>
+                <a href={`tel:${selected.phone.replace(/[^\d+]/g, "")}`} className="rounded-xl border border-border bg-card p-4 hover:border-[var(--brand-primary)] transition-colors"><p className="text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Phone</p><p className="font-semibold text-sm">{selected.phone}</p></a>
               </div>
 
               <div>
@@ -4046,13 +4057,13 @@ function AdminCustomOrders() {
 
               {selected.referenceMedia.length > 0 && <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Reference media</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{selected.referenceMedia.map((media, index) => <a key={`${media.url}-${index}`} href={media.url} target="_blank" rel="noreferrer" className="rounded-xl border border-border overflow-hidden bg-card hover:border-[#C4562A] transition-colors">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{selected.referenceMedia.map((media, index) => <a key={`${media.url}-${index}`} href={media.url} target="_blank" rel="noreferrer" className="rounded-xl border border-border overflow-hidden bg-card hover:border-[var(--brand-primary)] transition-colors">
                   {media.resourceType === "video" ? <video src={media.url} className="w-full aspect-square object-cover" /> : <img src={media.url} alt={`${selected.reference} reference ${index + 1}`} className="w-full aspect-square object-cover" />}
                   <p className="p-2 text-[10px] text-muted-foreground truncate">{media.name}</p>
                 </a>)}</div>
               </div>}
 
-              <form onSubmit={saveQuote} className="rounded-2xl border border-[#B8922A]/30 bg-[#B8922A]/5 p-5">
+              <form onSubmit={saveQuote} className="rounded-2xl border border-[var(--brand-accent)]/30 bg-[var(--brand-accent)]/5 p-5">
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-4">
                   <div><h3 className="font-bold text-lg" style={{ fontFamily: "var(--font-display)" }}>Quote &amp; Payment</h3><p className="text-xs text-muted-foreground mt-1">Saving sends the customer an email and WhatsApp payment invitation.</p></div>
                   <span className={`self-start rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${selected.paymentStatus === "paid" ? "bg-green-100 text-green-700" : selected.paymentStatus === "partially_paid" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"}`}>{selected.paymentStatus.replace(/_/g, " ")}</span>
@@ -4063,14 +4074,14 @@ function AdminCustomOrders() {
                   <label><span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Payment plan</span><select disabled={selected.amountPaid > 0} value={quoteForm.paymentPlan} onChange={(event) => setQuoteForm((current) => ({ ...current, paymentPlan: event.target.value as "full" | "deposit" }))} className="w-full border border-border rounded-lg bg-card px-3 py-2.5 text-sm disabled:opacity-60"><option value="full">Full payment</option><option value="deposit">Deposit + balance</option></select></label>
                   {quoteForm.paymentPlan === "deposit" && <label><span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1.5">Deposit %</span><input required disabled={selected.amountPaid > 0} type="number" min="1" max="99" value={quoteForm.depositPercentage} onChange={(event) => setQuoteForm((current) => ({ ...current, depositPercentage: event.target.value }))} className="w-full border border-border rounded-lg bg-card px-3 py-2.5 text-sm disabled:opacity-60" /></label>}
                 </div>
-                {selected.quotedPrice != null && <div className="grid grid-cols-3 gap-3 mt-4 text-sm"><div><span className="block text-[10px] uppercase text-muted-foreground">Quoted</span><strong>{ghs(selected.quotedPrice)}</strong></div><div><span className="block text-[10px] uppercase text-muted-foreground">Paid</span><strong className="text-green-700">{ghs(selected.amountPaid)}</strong></div><div><span className="block text-[10px] uppercase text-muted-foreground">Balance</span><strong className="text-[#C4562A]">{ghs(Math.max(0, selected.quotedPrice - selected.amountPaid))}</strong></div></div>}
-                <button disabled={quoteSaving || !quoteForm.price || selected.paymentStatus === "paid"} type="submit" className="mt-4 bg-[#C4562A] disabled:opacity-50 text-white rounded-lg px-5 py-2.5 text-sm font-bold hover:bg-[#A8411B]">{quoteSaving ? "Sending quote…" : selected.quoteStatus === "pending" ? "Save & Send Quote" : "Update & Resend Quote"}</button>
+                {selected.quotedPrice != null && <div className="grid grid-cols-3 gap-3 mt-4 text-sm"><div><span className="block text-[10px] uppercase text-muted-foreground">Quoted</span><strong>{ghs(selected.quotedPrice)}</strong></div><div><span className="block text-[10px] uppercase text-muted-foreground">Paid</span><strong className="text-green-700">{ghs(selected.amountPaid)}</strong></div><div><span className="block text-[10px] uppercase text-muted-foreground">Balance</span><strong className="text-[var(--brand-primary)]">{ghs(Math.max(0, selected.quotedPrice - selected.amountPaid))}</strong></div></div>}
+                <button disabled={quoteSaving || !quoteForm.price || selected.paymentStatus === "paid"} type="submit" className="mt-4 bg-[var(--brand-primary)] disabled:opacity-50 text-white rounded-lg px-5 py-2.5 text-sm font-bold hover:bg-[var(--brand-primary-hover)]">{quoteSaving ? "Sending quote…" : selected.quoteStatus === "pending" ? "Save & Send Quote" : "Update & Resend Quote"}</button>
               </form>
 
               <div className="border-t border-border pt-5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                 <div className="w-full sm:max-w-xs">
                   <label className="block text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Move to stage</label>
-                  <select disabled={savingId === selected.id} value={selected.col} onChange={(event) => void moveItem(selected.id, event.target.value)} className="w-full border border-border rounded-lg bg-card px-3 py-3 text-sm font-semibold focus:outline-none focus:border-[#C4562A]">
+                  <select disabled={savingId === selected.id} value={selected.col} onChange={(event) => void moveItem(selected.id, event.target.value)} className="w-full border border-border rounded-lg bg-card px-3 py-3 text-sm font-semibold focus:outline-none focus:border-[var(--brand-primary)]">
                     {KANBAN_COLS.map((column) => <option key={column.key} value={column.key}>{column.label}</option>)}
                   </select>
                 </div>
@@ -4106,7 +4117,7 @@ function AdminCustomers() {
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search customers..." className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[#C4562A]" />
+                placeholder="Search customers..." className="w-full pl-9 pr-3 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:border-[var(--brand-primary)]" />
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -4121,10 +4132,10 @@ function AdminCustomers() {
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} onClick={() => setSelected(c)}
-                    className={`border-b border-border/50 cursor-pointer transition-colors ${selected?.id === c.id ? "bg-[#C4562A]/5" : "hover:bg-muted/30"}`}>
+                    className={`border-b border-border/50 cursor-pointer transition-colors ${selected?.id === c.id ? "bg-[var(--brand-primary)]/5" : "hover:bg-muted/30"}`}>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-[#C4562A]/10 rounded-full flex items-center justify-center text-xs font-bold text-[#C4562A]">
+                        <div className="w-8 h-8 bg-[var(--brand-primary)]/10 rounded-full flex items-center justify-center text-xs font-bold text-[var(--brand-primary)]">
                           {c.name.charAt(0)}
                         </div>
                         <div>
@@ -4135,7 +4146,7 @@ function AdminCustomers() {
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">{c.location}</td>
                     <td className="px-5 py-3.5 font-semibold">{c.orders}</td>
-                    <td className="px-5 py-3.5 font-bold text-[#C4562A]">{ghs(c.spent)}</td>
+                    <td className="px-5 py-3.5 font-bold text-[var(--brand-primary)]">{ghs(c.spent)}</td>
                     <td className="px-5 py-3.5 text-muted-foreground text-xs">{c.joined}</td>
                   </tr>
                 ))}
@@ -4149,7 +4160,7 @@ function AdminCustomers() {
           {selected ? (
             <div className="bg-card rounded-xl border border-border/50 shadow-sm p-6">
               <div className="text-center mb-5">
-                <div className="w-14 h-14 bg-[#C4562A]/10 rounded-full flex items-center justify-center mx-auto mb-3 text-xl font-bold text-[#C4562A]">
+                <div className="w-14 h-14 bg-[var(--brand-primary)]/10 rounded-full flex items-center justify-center mx-auto mb-3 text-xl font-bold text-[var(--brand-primary)]">
                   {selected.name.charAt(0)}
                 </div>
                 <p className="font-bold text-base">{selected.name}</p>
@@ -4175,7 +4186,7 @@ function AdminCustomers() {
                   ))}
                 </div>
               </div>
-              <a href={`mailto:${selected.email}?subject=${encodeURIComponent("Aunty Sala Fashion Gh")}`} className="w-full border border-border py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2">
+              <a href={`mailto:${selected.email}?subject=${encodeURIComponent(brandName)}`} className="w-full border border-border py-2.5 rounded-lg text-sm font-semibold hover:bg-muted transition-colors flex items-center justify-center gap-2">
                 <Mail size={14}/> Email Customer
               </a>
             </div>
@@ -4248,7 +4259,7 @@ function AdminAnalytics() {
           { label: "Custom Requests", value: String(periodCustomOrders.length) }].map(m => (
           <div key={m.label} className="bg-card rounded-xl p-5 border border-border/50 shadow-sm text-center">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{m.label}</p>
-            <p className="text-3xl font-bold text-[#C4562A]">{m.value}</p>
+            <p className="text-3xl font-bold text-[var(--brand-primary)]">{m.value}</p>
           </div>
         ))}
       </div>
@@ -4262,9 +4273,9 @@ function AdminAnalytics() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
               <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number, name: string) => [name === "revenue" ? `GH₵ ${v.toLocaleString()}` : v, name === "revenue" ? "Revenue" : "Orders"]} />
-              <Bar dataKey="revenue" fill="#C4562A" radius={[4,4,0,0]} />
-              <Bar dataKey="orders" fill="#B8922A" radius={[4,4,0,0]} />
+              <Tooltip formatter={(v: number, name: string) => [name === "revenue" ? ghs(v) : v, name === "revenue" ? "Revenue" : "Orders"]} />
+              <Bar dataKey="revenue" fill="var(--brand-primary)" radius={[4,4,0,0]} />
+              <Bar dataKey="orders" fill="var(--brand-accent)" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -4278,7 +4289,7 @@ function AdminAnalytics() {
               <XAxis dataKey="month" tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
               <Tooltip />
-              <Line type="monotone" dataKey="orders" stroke="#C4562A" strokeWidth={2.5} dot={{ fill: "#C4562A", r: 4 }} />
+              <Line type="monotone" dataKey="orders" stroke="var(--brand-primary)" strokeWidth={2.5} dot={{ fill: "var(--brand-primary)", r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -4311,12 +4322,12 @@ function AdminAnalytics() {
                       </div>
                     </td>
                     <td className="px-6 py-4 font-semibold">{f.orders}</td>
-                    <td className="px-6 py-4 font-bold text-[#C4562A]">{ghs(f.revenue)}</td>
+                    <td className="px-6 py-4 font-bold text-[var(--brand-primary)]">{ghs(f.revenue)}</td>
                     <td className="px-6 py-4 text-muted-foreground">{ghs(Math.round(f.revenue/f.orders))}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-[#C4562A]" style={{ width: `${share}%` }} />
+                          <div className="h-full rounded-full bg-[var(--brand-primary)]" style={{ width: `${share}%` }} />
                         </div>
                         <span className="text-xs font-semibold">{share}%</span>
                       </div>
@@ -4336,7 +4347,7 @@ function AdminAnalytics() {
 // ─── ADMIN NOTIFICATIONS ──────────────────────────────────────────────────
 const EMAIL_TEMPLATE_PREVIEWS = [
   {
-    id: "account-created", name: "Welcome email", audience: "Customer", subject: "Welcome to Aunty Sala Fashion Gh",
+    id: "account-created", name: "Welcome email", audience: "Customer", subject: `Welcome to ${brandName}`,
     content: <><p>Hello Ama,</p><p>Your account has been created. You can now track orders, save addresses and measurements, and manage your wishlist.</p></>,
   },
   {
@@ -4360,8 +4371,8 @@ const EMAIL_TEMPLATE_PREVIEWS = [
     content: <><p>Hello Ama,</p><p>Your deposit payment for custom order <strong>#CUSTOM-A82F14C0</strong> has been verified.</p><p><strong>Payment:</strong> GHS 625.00<br/><strong>Total paid:</strong> GHS 625.00 of GHS 1,250.00</p><p>We will keep you updated as your piece moves through production.</p></>,
   },
   {
-    id: "newsletter", name: "Newsletter welcome", audience: "Customer", subject: "Welcome to the Aunty Sala newsletter",
-    content: <><p>Thanks for joining the Aunty Sala Fashion Gh newsletter.</p><p>You will receive new collections, style stories, and selected offers from us.</p></>,
+    id: "newsletter", name: "Newsletter welcome", audience: "Customer", subject: `Welcome to the ${brandShortName} newsletter`,
+    content: <><p>Thanks for joining the {brandName} newsletter.</p><p>You will receive new collections, style stories, and selected offers from us.</p></>,
   },
   {
     id: "admin-account", name: "New customer account", audience: "Admin", subject: "New customer account created",
@@ -4404,7 +4415,7 @@ function AdminEmailTemplates() {
           </div>
           <div className="p-2 max-h-[72vh] overflow-y-auto">
             {EMAIL_TEMPLATE_PREVIEWS.map((template) => (
-              <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`w-full rounded-lg px-3 py-3 text-left transition-colors ${selected.id === template.id ? "bg-[#C4562A]/10 text-[#C4562A]" : "hover:bg-muted"}`}>
+              <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`w-full rounded-lg px-3 py-3 text-left transition-colors ${selected.id === template.id ? "bg-[var(--brand-primary)]/10 text-[var(--brand-primary)]" : "hover:bg-muted"}`}>
                 <span className="block text-sm font-semibold">{template.name}</span>
                 <span className={`inline-block mt-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${template.audience === "Customer" ? "bg-green-50 text-green-700" : "bg-blue-50 text-blue-700"}`}>{template.audience}</span>
               </button>
@@ -4424,13 +4435,13 @@ function AdminEmailTemplates() {
             <div style={{ maxWidth: 600, margin: "auto", padding: "32px 20px", color: "#1a1a18", fontFamily: "Arial, sans-serif" }}>
               <div style={{ borderTop: "6px solid #b8922a", background: "#fff", padding: 32, borderRadius: 10 }}>
                 <div style={{ textAlign: "center", margin: "0 0 18px" }}>
-                  <img src="/aunty-sala-logo.png" width="92" alt="Aunty Sala Fashion Gh" style={{ display: "block", width: 92, maxWidth: "100%", height: "auto", margin: "0 auto", border: 0 }} />
+                  <img src={clientConfig.assets.logo} width="92" alt={brandName} style={{ display: "block", width: 92, maxWidth: "100%", height: "auto", margin: "0 auto", border: 0 }} />
                 </div>
-                <p style={{ margin: "0 0 8px", color: "#b8922a", fontSize: 12, letterSpacing: 2, textTransform: "uppercase", textAlign: "center" }}>Aunty Sala Fashion Gh</p>
+                <p style={{ margin: "0 0 8px", color: clientConfig.theme.accent, fontSize: 12, letterSpacing: 2, textTransform: "uppercase", textAlign: "center" }}>{brandName}</p>
                 <h1 style={{ fontSize: 24, margin: "0 0 20px", fontFamily: "Arial, sans-serif" }}>{selected.subject}</h1>
                 <div style={{ fontSize: 15, lineHeight: 1.7, color: "#4a4742" }}>{selected.content}</div>
               </div>
-              <p style={{ fontSize: 11, color: "#777", textAlign: "center", marginTop: 20 }}>Your inner diva, everything fashionable.</p>
+              <p style={{ fontSize: 11, color: "#777", textAlign: "center", marginTop: 20 }}>{clientConfig.tagline}</p>
             </div>
           </div>
         </section>
@@ -4461,13 +4472,13 @@ function AdminNotifications() {
           <h1 className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }}>Notifications</h1>
           <p className="text-muted-foreground text-sm mt-1">Email and WhatsApp delivery history</p>
         </div>
-        <button type="button" disabled={dispatching} onClick={() => void handleDispatch()} className="bg-[#C4562A] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-[#A8411B] transition-colors flex items-center gap-2">
+        <button type="button" disabled={dispatching} onClick={() => void handleDispatch()} className="bg-[var(--brand-primary)] disabled:opacity-50 text-white px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-[var(--brand-primary-hover)] transition-colors flex items-center gap-2">
           <Send size={14}/>{dispatching ? "Checking…" : "Run Delivery"}
         </button>
       </div>
       {message && <p role="status" className="mb-4 text-sm text-green-700 bg-green-50 rounded-lg p-3">{message}</p>}
       <div className="flex gap-2 mb-6 flex-wrap">
-        {statuses.map((status) => <button key={status} type="button" onClick={() => setFilter(status)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filter === status ? "bg-[#C4562A] text-white border-[#C4562A]" : "border-border hover:border-[#C4562A]"}`}>{status}</button>)}
+        {statuses.map((status) => <button key={status} type="button" onClick={() => setFilter(status)} className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${filter === status ? "bg-[var(--brand-primary)] text-white border-[var(--brand-primary)]" : "border-border hover:border-[var(--brand-primary)]"}`}>{status}</button>)}
       </div>
       <div className="bg-card rounded-xl border border-border/50 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
@@ -4502,7 +4513,10 @@ function AdminSettings() {
   const { settings, users, media, refresh } = useAdminData();
   const [tab, setTab] = useState<SettingsTab>("store");
   const storeFields = [
-    ["store_name", "Store name"], ["store_email", "Store email"], ["store_phone", "Store phone"],
+    ["store_name", "Store name"], ["brand_name", "Notification brand name"],
+    ["currency", "Currency (ISO code)"], ["country_name", "Country"], ["country_code", "Country code"],
+    ["order_prefix", "Order prefix"], ["custom_order_prefix", "Custom order prefix"],
+    ["store_email", "Store email"], ["store_phone", "Store phone"],
     ["store_address", "Store address"], ["store_hours", "Store hours"],
     ["instagram_handle", "Instagram handle"], ["whatsapp_number", "WhatsApp number"],
     ["notification_admin_email", "Admin notification email"], ["notification_admin_whatsapp", "Admin notification WhatsApp"],
@@ -4616,14 +4630,14 @@ function AdminSettings() {
 
   return (
     <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 xl:p-8" style={{ fontFamily: "var(--font-body)" }}>
-      <header className="relative mb-6 overflow-hidden rounded-3xl bg-[#1A1A18] px-6 py-7 text-white shadow-[0_18px_50px_rgba(26,26,24,0.16)] sm:px-8 sm:py-9">
-        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[#C4562A]/20 blur-2xl" />
-        <div className="pointer-events-none absolute bottom-0 right-1/3 h-28 w-28 rounded-full bg-[#B8922A]/10 blur-xl" />
+      <header className="relative mb-6 overflow-hidden rounded-3xl bg-[var(--brand-foreground)] px-6 py-7 text-white shadow-[0_18px_50px_rgba(26,26,24,0.16)] sm:px-8 sm:py-9">
+        <div className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[var(--brand-primary)]/20 blur-2xl" />
+        <div className="pointer-events-none absolute bottom-0 right-1/3 h-28 w-28 rounded-full bg-[var(--brand-accent)]/10 blur-xl" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-2xl">
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.2em] text-[#D6B450]"><Settings size={12} /> Admin workspace</div>
             <h1 className="text-3xl font-bold sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>Store settings</h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/60">Manage the details, visual assets and team access that keep Aunty Sala Fashion Gh running smoothly.</p>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/60">Manage the details, visual assets and team access that keep {brandName} running smoothly.</p>
           </div>
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {[[storeFields.length, "Details"], [media.length, "Media"], [activeUsers, "Active team"]].map(([value, label]) => (
@@ -4642,8 +4656,8 @@ function AdminSettings() {
           const selected = tab === item.key;
           return (
             <button key={item.key} id={`settings-tab-${item.key}`} type="button" role="tab" aria-selected={selected} aria-controls={`settings-panel-${item.key}`} onClick={() => setTab(item.key)}
-              className={`group flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C4562A]/40 ${selected ? "border-[#C4562A]/25 bg-[#C4562A] text-white shadow-[0_8px_20px_rgba(196,86,42,0.22)]" : "border-transparent text-[#1A1A18] hover:border-border hover:bg-[#F6F0E7]"}`}>
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${selected ? "bg-white/15 text-white" : "bg-[#C4562A]/8 text-[#C4562A] group-hover:bg-[#C4562A]/12"}`}><TabIcon size={18} /></span>
+              className={`group flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3.5 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)]/40 ${selected ? "border-[var(--brand-primary)]/25 bg-[var(--brand-primary)] text-white shadow-[0_8px_20px_rgba(196,86,42,0.22)]" : "border-transparent text-[var(--brand-foreground)] hover:border-border hover:bg-[#F6F0E7]"}`}>
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${selected ? "bg-white/15 text-white" : "bg-[var(--brand-primary)]/8 text-[var(--brand-primary)] group-hover:bg-[var(--brand-primary)]/12"}`}><TabIcon size={18} /></span>
               <span className="min-w-0"><span className="block text-sm font-bold">{item.label}</span><span className={`mt-0.5 block truncate text-[11px] ${selected ? "text-white/65" : "text-muted-foreground"}`}>{item.description}</span></span>
             </button>
           );
@@ -4661,13 +4675,13 @@ function AdminSettings() {
               <label key={key} htmlFor={`setting-${key}`} className={`rounded-2xl border border-border/60 bg-card p-4 shadow-[0_5px_20px_rgba(26,26,24,0.035)] ${key === "store_address" ? "md:col-span-2" : ""}`}>
                 <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
                 <input id={`setting-${key}`} type={key.includes("email") ? "email" : key.includes("phone") || key.includes("whatsapp") ? "tel" : "text"} value={storeForm[key] ?? ""} onChange={(event) => setStoreForm((current) => ({ ...current, [key]: event.target.value }))}
-                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm transition-all focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" />
+                  className="w-full rounded-xl border border-border bg-background px-4 py-3 text-sm transition-all focus:border-[var(--brand-primary)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-primary)]/8" />
               </label>
             ))}
           </div>
           <div className="flex flex-col gap-4 border-t border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
             <p role="status" aria-live="polite" className="text-sm text-muted-foreground">{storeMessage || "Changes appear on the storefront after saving."}</p>
-            <button disabled={storeSaving} type="submit" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-6 py-2.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(196,86,42,0.18)] transition-colors hover:bg-[#A8411B] disabled:cursor-not-allowed disabled:opacity-50">{storeSaving ? <><Clock size={15}/> Saving…</> : <><Check size={15}/> Save store details</>}</button>
+            <button disabled={storeSaving} type="submit" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-6 py-2.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(196,86,42,0.18)] transition-colors hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">{storeSaving ? <><Clock size={15}/> Saving…</> : <><Check size={15}/> Save store details</>}</button>
           </div>
         </form>
       )}
@@ -4676,16 +4690,16 @@ function AdminSettings() {
         <div id="settings-panel-users" role="tabpanel" aria-labelledby="settings-tab-users" className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
           <div className="flex flex-col gap-4 border-b border-border/60 px-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-7">
             <div><h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Team access</h2><p className="mt-1 text-xs text-muted-foreground">{activeUsers} active of {users.length} team member{users.length === 1 ? "" : "s"}</p></div>
-            <button type="button" aria-expanded={showAddAdmin} onClick={() => setShowAddAdmin((current) => !current)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[#A8411B]"><Plus size={14}/> Add team member</button>
+            <button type="button" aria-expanded={showAddAdmin} onClick={() => setShowAddAdmin((current) => !current)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors hover:bg-[var(--brand-primary-hover)]"><Plus size={14}/> Add team member</button>
           </div>
           <div className="bg-[#F8F4ED]/60 p-4 sm:p-6">
           {showAddAdmin && (
-            <form onSubmit={handleAddAdmin} className="mb-5 rounded-2xl border border-[#C4562A]/20 bg-[#C4562A]/5 p-4 sm:p-5">
+            <form onSubmit={handleAddAdmin} className="mb-5 rounded-2xl border border-[var(--brand-primary)]/20 bg-[var(--brand-primary)]/5 p-4 sm:p-5">
               <div className="mb-4"><h3 className="text-sm font-bold">Add a team member</h3><p className="mt-1 text-xs text-muted-foreground">They must already have a customer account using this email.</p></div>
               <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_150px_auto]">
-                <input aria-label="Team member email" required type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="person@example.com" className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" />
+                <input aria-label="Team member email" required type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="person@example.com" className="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm focus:border-[var(--brand-primary)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-primary)]/8" />
                 <select aria-label="Team member role" value={adminRole} onChange={(event) => setAdminRole(event.target.value as "staff" | "admin")} className="h-11 rounded-xl border border-border bg-card px-3 text-sm"><option value="staff">Staff</option><option value="admin">Admin</option></select>
-                <button disabled={adminSaving} type="submit" className="h-11 rounded-xl bg-[#1A1A18] px-5 text-xs font-bold text-white disabled:opacity-50">{adminSaving ? "Adding…" : "Add access"}</button>
+                <button disabled={adminSaving} type="submit" className="h-11 rounded-xl bg-[var(--brand-foreground)] px-5 text-xs font-bold text-white disabled:opacity-50">{adminSaving ? "Adding…" : "Add access"}</button>
               </div>
             </form>
           )}
@@ -4695,7 +4709,7 @@ function AdminSettings() {
               <div key={u.id} className={`rounded-2xl border bg-card p-4 shadow-[0_5px_18px_rgba(26,26,24,0.035)] ${u.active ? "border-border/70" : "border-border/50 opacity-60"}`}>
                 <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C4562A]/10 text-sm font-bold text-[#C4562A]">{u.name.charAt(0)}</div>
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--brand-primary)]/10 text-sm font-bold text-[var(--brand-primary)]">{u.name.charAt(0)}</div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold">{u.name}</p>
                     <p className="truncate text-xs text-muted-foreground">{u.email}</p>
@@ -4718,30 +4732,30 @@ function AdminSettings() {
       {tab === "media" && (
         <div id="settings-panel-media" role="tabpanel" aria-labelledby="settings-tab-media" className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(340px,430px)_1fr]">
           <form onSubmit={handleMediaSave} className="h-fit overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm xl:sticky xl:top-24">
-            <div className="border-b border-border/60 bg-[#1A1A18] px-6 py-5 text-white"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-[#D6B450]"><Upload size={18}/></span><div><h2 className="font-bold" style={{ fontFamily: "var(--font-display)" }}>Upload media</h2><p className="mt-0.5 text-[11px] text-white/50">Publish to Cloudinary and the storefront</p></div></div></div>
+            <div className="border-b border-border/60 bg-[var(--brand-foreground)] px-6 py-5 text-white"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-[#D6B450]"><Upload size={18}/></span><div><h2 className="font-bold" style={{ fontFamily: "var(--font-display)" }}>Upload media</h2><p className="mt-0.5 text-[11px] text-white/50">Publish to Cloudinary and the storefront</p></div></div></div>
             <div className="p-5 sm:p-6">
-            <p className="mb-5 rounded-xl border border-[#B8922A]/15 bg-[#B8922A]/5 p-3 text-xs leading-relaxed text-muted-foreground">Existing placements are replaced automatically. Gallery uploads create a new item.</p>
+            <p className="mb-5 rounded-xl border border-[var(--brand-accent)]/15 bg-[var(--brand-accent)]/5 p-3 text-xs leading-relaxed text-muted-foreground">Existing placements are replaced automatically. Gallery uploads create a new item.</p>
             <div className="space-y-4">
               <div>
                 <label htmlFor="media-placement" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Storefront placement</label>
-                <select id="media-placement" value={mediaPlacement} onChange={(event) => setMediaPlacement(event.target.value)} className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm capitalize focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8">
+                <select id="media-placement" value={mediaPlacement} onChange={(event) => setMediaPlacement(event.target.value)} className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm capitalize focus:border-[var(--brand-primary)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-primary)]/8">
                   {mediaPlacements.map((placement) => <option key={placement} value={placement}>{placement.replace(/_/g, " ")}</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="media-alt" className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Accessible description</label>
-                <input id="media-alt" required value={mediaAlt} onChange={(event) => setMediaAlt(event.target.value)} placeholder="Describe what is shown in the image" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" />
+                <input id="media-alt" required value={mediaAlt} onChange={(event) => setMediaAlt(event.target.value)} placeholder="Describe what is shown in the image" className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-[var(--brand-primary)] focus:outline-none focus:ring-4 focus:ring-[var(--brand-primary)]/8" />
                 <p className="mt-1.5 text-[10px] text-muted-foreground">Clear descriptions improve accessibility and search visibility.</p>
               </div>
-              <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-9 text-center transition-colors ${mediaFile ? "border-[#7A8C6E] bg-[#7A8C6E]/5" : "border-border bg-[#F8F4ED]/60 hover:border-[#C4562A] hover:bg-[#C4562A]/5"}`}>
+              <label className={`flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-9 text-center transition-colors ${mediaFile ? "border-[#7A8C6E] bg-[#7A8C6E]/5" : "border-border bg-[#F8F4ED]/60 hover:border-[var(--brand-primary)] hover:bg-[var(--brand-primary)]/5"}`}>
                 <input key={mediaInputKey} required type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm" className="sr-only" onChange={(event) => setMediaFile(event.target.files?.[0] ?? null)} />
-                <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${mediaFile ? "bg-[#7A8C6E]/10 text-[#526346]" : "bg-card text-[#C4562A] shadow-sm"}`}><Upload size={19}/></span>
-                <span className="max-w-full truncate text-sm font-bold text-[#1A1A18]">{mediaFile?.name ?? "Choose an image or video"}</span>
+                <span className={`mb-3 flex h-11 w-11 items-center justify-center rounded-xl ${mediaFile ? "bg-[#7A8C6E]/10 text-[#526346]" : "bg-card text-[var(--brand-primary)] shadow-sm"}`}><Upload size={19}/></span>
+                <span className="max-w-full truncate text-sm font-bold text-[var(--brand-foreground)]">{mediaFile?.name ?? "Choose an image or video"}</span>
                 <span className="mt-1 text-[10px] text-muted-foreground">JPEG, PNG, WebP, GIF, MP4 or WebM</span>
               </label>
             </div>
             {mediaMessage && <p role="status" aria-live="polite" className="mt-4 rounded-xl border border-border bg-background px-4 py-3 text-xs text-muted-foreground">{mediaMessage}</p>}
-            <button disabled={mediaSaving || !mediaFile || !mediaAlt.trim()} type="submit" className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(196,86,42,0.18)] transition-colors hover:bg-[#A8411B] disabled:cursor-not-allowed disabled:opacity-50">
+            <button disabled={mediaSaving || !mediaFile || !mediaAlt.trim()} type="submit" className="mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--brand-primary)] px-5 py-2.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(196,86,42,0.18)] transition-colors hover:bg-[var(--brand-primary-hover)] disabled:cursor-not-allowed disabled:opacity-50">
               {mediaSaving ? "Uploading…" : mediaPlacement === "gallery" ? "Add to Gallery" : "Upload & Replace"}
             </button>
             </div>
@@ -4750,19 +4764,19 @@ function AdminSettings() {
           <section className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
             <div className="flex items-center justify-between border-b border-border/60 px-5 py-5 sm:px-6">
               <div><h2 className="text-lg font-bold" style={{ fontFamily: "var(--font-display)" }}>Current media</h2><p className="mt-0.5 text-xs text-muted-foreground">{media.length} active item{media.length === 1 ? "" : "s"} across the storefront</p></div>
-              <span className="rounded-full bg-[#C4562A]/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#C4562A]">Cloudinary</span>
+              <span className="rounded-full bg-[var(--brand-primary)]/8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--brand-primary)]">Cloudinary</span>
             </div>
-            {media.length === 0 ? <div className="p-14 text-center text-sm text-muted-foreground"><span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted"><Upload size={24} className="opacity-40"/></span><p className="font-semibold text-[#1A1A18]">Your media library is empty</p><p className="mt-1 text-xs">Upload the first storefront image using the form.</p></div> : (
+            {media.length === 0 ? <div className="p-14 text-center text-sm text-muted-foreground"><span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted"><Upload size={24} className="opacity-40"/></span><p className="font-semibold text-[var(--brand-foreground)]">Your media library is empty</p><p className="mt-1 text-xs">Upload the first storefront image using the form.</p></div> : (
               <div className="grid grid-cols-1 gap-4 bg-[#F8F4ED]/60 p-4 sm:grid-cols-2 sm:p-5 2xl:grid-cols-3">
                 {media.map((item) => <article key={`${item.kind}-${item.id}`} className="group overflow-hidden rounded-2xl border border-border/70 bg-card shadow-[0_5px_18px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(26,26,24,0.1)]">
                   <div className="relative aspect-[4/3] overflow-hidden bg-muted">
                     {item.resourceType === "video" ? <video src={item.url} controls className="h-full w-full object-cover" /> : <img src={item.url} alt={item.altText} loading="lazy" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]" />}
-                    <span className="absolute left-3 top-3 rounded-full bg-[#1A1A18]/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">{item.kind}</span>
+                    <span className="absolute left-3 top-3 rounded-full bg-[var(--brand-foreground)]/80 px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">{item.kind}</span>
                   </div>
                   <div className="p-4">
                     <div className="min-w-0"><p className="truncate text-sm font-bold capitalize">{item.placement.replace(/_/g, " ")}</p><p className="mt-1 truncate text-xs text-muted-foreground">{item.altText || "No alt text"}</p></div>
                     <div className="mt-4 flex gap-2 border-t border-border/60 pt-3">
-                      {item.kind === "site" ? <button type="button" onClick={() => { setMediaPlacement(item.placement); setMediaAlt(item.altText); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex-1 rounded-lg border border-border py-2 text-xs font-semibold transition-colors hover:border-[#C4562A]/30 hover:bg-[#C4562A]/5 hover:text-[#C4562A]">Replace</button> : <span className="flex-1" />}
+                      {item.kind === "site" ? <button type="button" onClick={() => { setMediaPlacement(item.placement); setMediaAlt(item.altText); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex-1 rounded-lg border border-border py-2 text-xs font-semibold transition-colors hover:border-[var(--brand-primary)]/30 hover:bg-[var(--brand-primary)]/5 hover:text-[var(--brand-primary)]">Replace</button> : <span className="flex-1" />}
                       <button disabled={mediaSaving} type="button" onClick={() => void handleMediaRemove(item.kind, item.id, item.placement.replace(/_/g, " "))} className="rounded-lg border border-border p-2 text-muted-foreground transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" aria-label={`Remove ${item.placement.replace(/_/g, " ")}`}><Trash2 size={14}/></button>
                     </div>
                   </div>
@@ -4794,24 +4808,12 @@ const PAGE_PATHS: Record<string, string> = {
   "terms-of-service": "/terms-of-service",
 };
 
-const CONFIGURED_STORE_ORIGIN = (import.meta.env.VITE_STORE_ORIGIN || "https://auntysalafashiongh.store").replace(/\/$/, "");
-const CONFIGURED_ADMIN_ORIGIN = (import.meta.env.VITE_ADMIN_ORIGIN || "https://admin.auntysalafashiongh.store").replace(/\/$/, "");
-const SHOP_DOMAIN = "auntysalafashiongh.shop";
-const currentHostname = window.location.hostname.toLowerCase();
-const usesShopDomain = currentHostname === SHOP_DOMAIN
-  || currentHostname === `www.${SHOP_DOMAIN}`
-  || currentHostname === `admin.${SHOP_DOMAIN}`;
-const STORE_ORIGIN = usesShopDomain ? `https://${SHOP_DOMAIN}` : CONFIGURED_STORE_ORIGIN;
-const ADMIN_ORIGIN = usesShopDomain ? `https://admin.${SHOP_DOMAIN}` : CONFIGURED_ADMIN_ORIGIN;
-const ADMIN_HOSTNAMES = new Set([
-  new URL(CONFIGURED_ADMIN_ORIGIN).hostname,
-  "admin.auntysalafashiongh.store",
-  `admin.${SHOP_DOMAIN}`,
-  "admin.localhost",
-]);
+const activeDomainPair = resolveDomainPair(clientConfig, window.location.hostname);
+const STORE_ORIGIN = activeDomainPair.storefront;
+const ADMIN_ORIGIN = activeDomainPair.admin;
 
 function isAdminHostname(hostname: string) {
-  return ADMIN_HOSTNAMES.has(hostname.toLowerCase());
+  return isConfiguredAdminHostname(clientConfig, hostname);
 }
 
 function adminPageFromPath(path: string, adminHost: boolean) {
@@ -4840,8 +4842,9 @@ function routeFromPath(pathname: string, hostname = window.location.hostname) {
     return { page: "home", adminPage: adminPageFromPath(path, false), isAdmin: true };
   }
 
-  const page = Object.entries(PAGE_PATHS).find(([, routePath]) => routePath === path)?.[0]
+  const requestedPage = Object.entries(PAGE_PATHS).find(([, routePath]) => routePath === path)?.[0]
     ?? (path === "/custom" ? "custom" : "home");
+  const page = requestedPage === "custom" && !clientConfig.features.customOrders ? "shop" : requestedPage;
   return { page, adminPage: "dashboard", isAdmin: false };
 }
 
@@ -4921,7 +4924,7 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    if (!session) {
+    if (!session || !clientConfig.features.wishlist) {
       setWishlistIds([]);
       return;
     }
@@ -4972,7 +4975,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isAdmin) return;
-    document.title = "Admin Portal | Aunty Sala Fashion Gh";
+    document.title = `Admin Portal | ${brandName}`;
     document.head.querySelector<HTMLMetaElement>('meta[name="robots"]')?.setAttribute("content", "noindex, nofollow");
   }, [isAdmin]);
 
@@ -5018,6 +5021,7 @@ export default function App() {
   };
 
   const toggleWishlistItem = async (productId: string) => {
+    if (!clientConfig.features.wishlist) throw new Error("Wishlist is disabled for this store.");
     if (!session) throw new Error("AUTH_REQUIRED");
     const wasSaved = wishlistIds.includes(productId);
     setWishlistIds((current) => wasSaved ? current.filter((id) => id !== productId) : [...current, productId]);
@@ -5046,7 +5050,7 @@ export default function App() {
     if (authLoading) return <FashionLoader label="Checking your session…" />;
     if (!session) return <LoginPage redirectPath="/" context="admin" />;
     if (adminLoading) return <FashionLoader label="Preparing the admin portal…" />;
-    if (adminError) return <div className="min-h-screen flex flex-col gap-4 items-center justify-center"><p className="text-red-600">{adminError}</p><button onClick={() => window.location.assign(STORE_ORIGIN)} className="text-[#C4562A] font-semibold">Back to store</button></div>;
+    if (adminError) return <div className="min-h-screen flex flex-col gap-4 items-center justify-center"><p className="text-red-600">{adminError}</p><button onClick={() => window.location.assign(STORE_ORIGIN)} className="text-[var(--brand-primary)] font-semibold">Back to store</button></div>;
     return (
       <ProductsContext.Provider value={products}>
       <AdminDataContext.Provider value={{ ...adminData, refresh: refreshAdminData }}>
@@ -5062,10 +5066,10 @@ export default function App() {
             <div className="flex items-center gap-3">
               <button onClick={() => setAdminPageNav("orders")} aria-label="View orders requiring attention" className="relative p-2 hover:bg-muted rounded-lg transition-colors">
                 <Bell size={18} />
-                {adminData.orders.some((order) => ["Paid", "Processing"].includes(order.status)) && <span className="absolute top-1 right-1 w-2 h-2 bg-[#C4562A] rounded-full" />}
+                {adminData.orders.some((order) => ["Paid", "Processing"].includes(order.status)) && <span className="absolute top-1 right-1 w-2 h-2 bg-[var(--brand-primary)] rounded-full" />}
               </button>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-[#C4562A]/10 rounded-full flex items-center justify-center text-sm font-bold text-[#C4562A]">{session.user.email?.charAt(0).toUpperCase()}</div>
+                <div className="w-8 h-8 bg-[var(--brand-primary)]/10 rounded-full flex items-center justify-center text-sm font-bold text-[var(--brand-primary)]">{session.user.email?.charAt(0).toUpperCase()}</div>
                 <span className="text-sm font-semibold hidden sm:block">{session.user.email}</span>
               </div>
             </div>
@@ -5099,7 +5103,7 @@ export default function App() {
       {!storeLoading && !storeError && page === "home" && <HomePage setPage={setPageNav} addToCart={addToCart} />}
       {!storeLoading && !storeError && page === "shop" && <ShopPage setPage={setPageNav} addToCart={addToCart} />}
       {!storeLoading && !storeError && page.startsWith("product-") && <ProductDetailPage productSlug={productSlug} setPage={setPageNav} addToCart={addToCart} onProductLoaded={mergeStoreProduct} />}
-      {page === "custom" && <CustomOrderPage />}
+      {clientConfig.features.customOrders && page === "custom" && <CustomOrderPage />}
       {page === "cart" && <CartPage cartItems={cartItems} setCartItems={setCartItems} setPage={setPageNav} promoCode={promoCode} setPromoCode={setPromoCode} />}
       {page === "checkout" && (authLoading
         ? <FashionLoader className="pt-16" label="Preparing checkout…" />

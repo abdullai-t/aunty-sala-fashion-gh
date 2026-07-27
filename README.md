@@ -3,6 +3,12 @@
 
   This is the codebase for Aunty Sala Fashion Gh. The original design is available at https://www.figma.com/design/ilM2MDHyExcj0Ecm27pLDM/E-commerce-Website-Design.
 
+## Reusing the platform
+
+The storefront and admin portal support isolated, configuration-driven client
+deployments. See [docs/MULTICLIENT.md](docs/MULTICLIENT.md) for the client
+profile, database, domain, payment, notification, and deployment workflow.
+
   ## Running the code
 
   Run `npm i` to install the dependencies.
