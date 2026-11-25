@@ -118,3 +118,153 @@ on conflict (placement) do update set
   media_id = excluded.media_id,
   alt_text = excluded.alt_text,
   is_active = excluded.is_active;
+
+-- Promote the local Auth account created in Studio to an administrator.
+insert into public.admin_users (user_id, role, is_active)
+select id, 'admin'::public.admin_role, true
+from auth.users
+where lower(email) = lower('admin@example.test')
+on conflict (user_id) do update set
+  role = excluded.role,
+  is_active = excluded.is_active;
+
+-- Repeatable guest orders for exercising the admin order workflow.
+with seeded_products as (
+  select
+    id,
+    sku,
+    name,
+    price,
+    sizes,
+    colors,
+    row_number() over (order by sku) as product_number,
+    count(*) over () as product_count
+  from public.products
+  where sku like 'SEED-%'
+),
+seed_orders as (
+  select
+    order_index,
+    product.id as product_id,
+    product.sku,
+    product.name as product_name,
+    product.price,
+    product.sizes,
+    product.colors,
+    1 + mod(order_index, 3) as quantity,
+    case mod(order_index, 6)
+      when 1 then 'draft'
+      when 2 then 'paid'
+      when 3 then 'processing'
+      when 4 then 'shipped'
+      when 5 then 'delivered'
+      else 'cancelled'
+    end as status,
+    case mod(order_index, 6)
+      when 1 then 'pending'
+      when 2 then 'paid'
+      when 3 then 'paid'
+      when 4 then 'paid'
+      when 5 then 'paid'
+      else 'refunded'
+    end as payment_status,
+    case mod(order_index, 3)
+      when 0 then 'momo'
+      when 1 then 'card'
+      else 'cash'
+    end as payment_method
+  from generate_series(1, 100) as generated(order_index)
+  join seeded_products product
+    on product.product_number = 1 + mod(order_index - 1, product.product_count)
+)
+insert into public.orders (
+  id, order_number, customer_name, customer_email, customer_phone,
+  shipping_address, shipping_city, shipping_country, status, payment_status,
+  payment_method, subtotal, shipping_fee, paid_at, created_at, updated_at
+)
+select
+  ('a2000000-0000-4000-8000-' || lpad(order_index::text, 12, '0'))::uuid,
+  '#ASF-SEED-' || lpad(order_index::text, 3, '0'),
+  'Development Customer ' || lpad(order_index::text, 3, '0'),
+  'dev-customer-' || lpad(order_index::text, 3, '0') || '@example.test',
+  '0000000000',
+  'Development order ' || order_index || ', Osu',
+  'Accra',
+  'Ghana',
+  status::public.order_status,
+  payment_status::public.payment_status,
+  payment_method,
+  price * quantity,
+  50,
+  case when payment_status = 'paid' then now() - make_interval(days => order_index) end,
+  now() - make_interval(days => order_index),
+  now() - make_interval(days => order_index)
+from seed_orders
+on conflict (id) do update set
+  order_number = excluded.order_number,
+  customer_name = excluded.customer_name,
+  customer_email = excluded.customer_email,
+  customer_phone = excluded.customer_phone,
+  shipping_address = excluded.shipping_address,
+  shipping_city = excluded.shipping_city,
+  shipping_country = excluded.shipping_country,
+  status = excluded.status,
+  payment_status = excluded.payment_status,
+  payment_method = excluded.payment_method,
+  subtotal = excluded.subtotal,
+  shipping_fee = excluded.shipping_fee,
+  paid_at = excluded.paid_at,
+  created_at = excluded.created_at,
+  updated_at = excluded.updated_at;
+
+with seeded_products as (
+  select
+    id,
+    sku,
+    name,
+    price,
+    sizes,
+    colors,
+    row_number() over (order by sku) as product_number,
+    count(*) over () as product_count
+  from public.products
+  where sku like 'SEED-%'
+),
+seed_items as (
+  select
+    order_index,
+    product.id as product_id,
+    product.sku,
+    product.name as product_name,
+    product.price,
+    product.sizes,
+    product.colors,
+    1 + mod(order_index, 3) as quantity
+  from generate_series(1, 100) as generated(order_index)
+  join seeded_products product
+    on product.product_number = 1 + mod(order_index - 1, product.product_count)
+)
+insert into public.order_items (
+  id, order_id, product_id, product_name, sku, unit_price, quantity,
+  selected_size, selected_color
+)
+select
+  ('a3000000-0000-4000-8000-' || lpad(order_index::text, 12, '0'))::uuid,
+  ('a2000000-0000-4000-8000-' || lpad(order_index::text, 12, '0'))::uuid,
+  product_id,
+  product_name,
+  sku,
+  price,
+  quantity,
+  sizes[1 + mod(order_index - 1, cardinality(sizes))],
+  colors[1 + mod(order_index - 1, cardinality(colors))]
+from seed_items
+on conflict (id) do update set
+  order_id = excluded.order_id,
+  product_id = excluded.product_id,
+  product_name = excluded.product_name,
+  sku = excluded.sku,
+  unit_price = excluded.unit_price,
+  quantity = excluded.quantity,
+  selected_size = excluded.selected_size,
+  selected_color = excluded.selected_color;

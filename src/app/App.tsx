@@ -48,7 +48,6 @@ import {
 } from "../lib/store-api";
 import { uploadManyToCloudinary, type CloudinaryAsset } from "../lib/cloudinary";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
-import { TurnstileWidget, verifyTurnstileToken } from "../lib/turnstile";
 import {
   ShoppingCart, Menu, X, Star, Heart, Search, Package, Users,
   BarChart2, Settings, ShoppingBag, Scissors, MessageCircle,
@@ -1246,8 +1245,6 @@ function CustomOrderPage() {
   const [submitError, setSubmitError] = useState("");
   const [submissionReference, setSubmissionReference] = useState("");
   const [referenceFiles, setReferenceFiles] = useState<File[]>([]);
-  const [customOrderTurnstileToken, setCustomOrderTurnstileToken] = useState("");
-  const [customOrderTurnstileReset, setCustomOrderTurnstileReset] = useState(0);
   const [form, setForm] = useState({
     style: "", fabric: "", occasion: "", budget: "", name: "", email: "", phone: "",
     bust: "", waist: "", hips: "", height: "", notes: "",
@@ -1259,14 +1256,9 @@ function CustomOrderPage() {
   const up = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSubmit = async () => {
-    if (!customOrderTurnstileToken) {
-      setSubmitError("Complete the security verification before submitting your order.");
-      return;
-    }
     setSubmitting(true);
     setSubmitError("");
     try {
-      await verifyTurnstileToken(customOrderTurnstileToken);
       const media = referenceFiles.length
         ? await uploadManyToCloudinary(referenceFiles, "aunty-sala-fashion-gh/custom-orders")
         : [];
@@ -1277,8 +1269,6 @@ function CustomOrderPage() {
       setSubmitError(error instanceof Error ? error.message : "We couldn't submit your request. Please try again.");
     } finally {
       setSubmitting(false);
-      setCustomOrderTurnstileToken("");
-      setCustomOrderTurnstileReset((value) => value + 1);
     }
   };
 
@@ -1469,16 +1459,9 @@ function CustomOrderPage() {
                 <div className="flex justify-between"><span className="text-muted-foreground">Timeline:</span><span className="font-medium text-[#B8922A]">2–4 weeks</span></div>
               </div>
             </div>
-            <div className="mb-5">
-              <TurnstileWidget
-                key={customOrderTurnstileReset}
-                onVerify={setCustomOrderTurnstileToken}
-                onError={setSubmitError}
-              />
-            </div>
             <div className="flex gap-3">
               <button onClick={() => setStep(3)} className="flex-1 border border-border py-3.5 rounded-lg font-semibold text-sm hover:bg-muted transition-colors">Back</button>
-              <button disabled={submitting || !form.name || !form.email || !form.phone || !customOrderTurnstileToken} onClick={handleSubmit} className="flex-1 bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
+              <button disabled={submitting || !form.name || !form.email || !form.phone} onClick={handleSubmit} className="flex-1 bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-semibold transition-colors flex items-center justify-center gap-2">
                 {submitting ? (referenceFiles.length ? "Uploading & submitting…" : "Submitting…") : "Submit Order"} <Send size={15}/>
               </button>
             </div>
@@ -1953,13 +1936,64 @@ function CheckoutPage({ cartItems, setPage, session, onOrderPlaced, promoCode }:
 }
 
 // ─── ACCOUNT PAGE ──────────────────────────────────────────────────────────
+function PasswordRecoveryPage({ onComplete }: { onComplete: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    try {
+      if (!supabase) throw new Error("Supabase is not configured yet.");
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+      onComplete();
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "We couldn't update your password. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#F3ECE2] px-4 py-10">
+      <form onSubmit={handleSubmit} className="w-full max-w-md space-y-5 rounded-2xl bg-white p-6 shadow-xl sm:p-8">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A1A18]" style={{ fontFamily: "var(--font-display)" }}>Set a new password</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Choose a password to secure your account.</p>
+        </div>
+        <label htmlFor="recovery-password" className="block">
+          <span className="mb-2 block text-sm font-semibold">New password</span>
+          <input id="recovery-password" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/10" />
+        </label>
+        <label htmlFor="recovery-password-confirm" className="block">
+          <span className="mb-2 block text-sm font-semibold">Confirm password</span>
+          <input id="recovery-password-confirm" type="password" autoComplete="new-password" minLength={8} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-xl border border-border px-4 py-3 text-sm focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/10" />
+        </label>
+        {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+        <button type="submit" disabled={saving || !isSupabaseConfigured} className="w-full rounded-xl bg-[#C4562A] px-4 py-3 font-semibold text-white transition-colors hover:bg-[#A8411B] disabled:cursor-not-allowed disabled:opacity-50">
+          {saving ? "Updating password…" : "Update password"}
+        </button>
+      </form>
+    </main>
+  );
+}
+
 function LoginPage({ redirectPath = "/account", context = "customer" }: { redirectPath?: string; context?: "customer" | "admin" }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sending, setSending] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loginTurnstileToken, setLoginTurnstileToken] = useState("");
-  const [loginTurnstileReset, setLoginTurnstileReset] = useState(0);
+  const [mode, setMode] = useState<"sign-in" | "sign-up" | "reset">("sign-in");
 
   const redirectTo = `${window.location.origin}${redirectPath}`;
 
@@ -1976,34 +2010,42 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
     if (authError) setError(authError.message);
   };
 
-  const handleMagicLink = async (event: FormEvent<HTMLFormElement>) => {
+  const handleEmailPassword = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!loginTurnstileToken) {
-      setError("Complete the security verification before requesting a sign-in link.");
-      return;
-    }
     setSending(true);
     setError("");
     setMessage("");
     try {
       if (!supabase) throw new Error("Supabase is not configured yet.");
-      await verifyTurnstileToken(loginTurnstileToken);
-      const { error: authError } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: redirectTo },
-      });
-      if (authError) throw authError;
-      setMessage("Check your email for a secure sign-in link.");
+      if (mode === "reset") {
+        const { error: authError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${redirectTo}?passwordRecovery=1`,
+        });
+        if (authError) throw authError;
+        setMessage("If an account exists for this email, a password-reset link has been sent.");
+      } else if (mode === "sign-up") {
+        const { error: authError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: redirectTo },
+        });
+        if (authError) throw authError;
+        setPassword("");
+        setMessage("Check your email to confirm your account, then sign in with your password.");
+      } else {
+        const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+        if (authError) throw authError;
+      }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "We couldn't send a sign-in link. Please try again.");
+      setError(submitError instanceof Error ? submitError.message : "Authentication failed. Please try again.");
     } finally {
       setSending(false);
-      setLoginTurnstileToken("");
-      setLoginTurnstileReset((value) => value + 1);
     }
   };
 
   const isAdminLogin = context === "admin";
+  const isResetMode = mode === "reset";
+  const isSignUpMode = mode === "sign-up";
 
   return (
     <div className={`relative flex min-h-screen items-start justify-center overflow-y-auto px-4 py-6 sm:px-6 ${isAdminLogin ? "bg-[#2B2822]" : "fixed inset-0 z-[80] bg-transparent"}`} style={{ fontFamily: "var(--font-body)" }}>
@@ -2050,31 +2092,40 @@ function LoginPage({ redirectPath = "/account", context = "customer" }: { redire
 
             <div className="mb-7">
               <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#B8922A]/20 bg-[#B8922A]/5 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#8A6E1E]"><User size={12} />{isAdminLogin ? "Authorized team members" : "Your personal account"}</div>
-              <h1 className="text-3xl font-bold leading-tight text-[#1A1A18] sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>{isAdminLogin ? "Welcome to the studio" : "Welcome back"}</h1>
-              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">{isAdminLogin ? "Sign in with your approved staff email to continue to the admin portal." : "Sign in securely to continue shopping and manage your Aunty Sala experience."}</p>
+              <h1 className="text-3xl font-bold leading-tight text-[#1A1A18] sm:text-4xl" style={{ fontFamily: "var(--font-display)" }}>{isResetMode ? "Reset your password" : isSignUpMode ? "Create your account" : isAdminLogin ? "Welcome to the studio" : "Welcome back"}</h1>
+              <p className="mt-2.5 text-sm leading-relaxed text-muted-foreground">{isResetMode ? "Enter your email and we’ll send you a link to choose a new password." : isSignUpMode ? "Create an account to save your details and track your orders." : isAdminLogin ? "Sign in with your approved staff email to continue to the admin portal." : "Sign in to continue shopping and manage your Aunty Sala experience."}</p>
             </div>
 
-            <button type="button" onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
-              className="group flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm font-bold text-[#1A1A18] shadow-[0_4px_14px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#C4562A]/35 hover:shadow-[0_8px_22px_rgba(26,26,24,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/10 disabled:cursor-not-allowed disabled:opacity-50">
-              <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-sm font-black text-[#4285F4] shadow-sm">G</span>
-              Continue with Google
-            </button>
+            {!isResetMode && <>
+              <button type="button" onClick={handleGoogleLogin} disabled={!isSupabaseConfigured}
+                className="group flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-border bg-white px-4 py-3 text-sm font-bold text-[#1A1A18] shadow-[0_4px_14px_rgba(26,26,24,0.04)] transition-all hover:-translate-y-0.5 hover:border-[#C4562A]/35 hover:shadow-[0_8px_22px_rgba(26,26,24,0.08)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/10 disabled:cursor-not-allowed disabled:opacity-50">
+                <span className="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-white text-sm font-black text-[#4285F4] shadow-sm">G</span>
+                Continue with Google
+              </button>
+              <div className="my-6 flex items-center gap-3" aria-hidden="true"><div className="h-px flex-1 bg-border" /><span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">or continue with email</span><div className="h-px flex-1 bg-border" /></div>
+            </>}
 
-            <div className="my-6 flex items-center gap-3" aria-hidden="true"><div className="h-px flex-1 bg-border" /><span className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">or sign in without a password</span><div className="h-px flex-1 bg-border" /></div>
-
-            <form onSubmit={handleMagicLink} className="space-y-4">
+            <form onSubmit={handleEmailPassword} className="space-y-4">
               <label htmlFor="login-email" className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Email address</span><div className="relative"><Mail size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground" /><input id="login-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="min-h-12 w-full rounded-xl border border-border bg-white py-3 pl-11 pr-4 text-sm transition-all placeholder:text-muted-foreground/45 focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" /></div></label>
-              <div className="overflow-hidden rounded-xl border border-border/60 bg-white p-3"><TurnstileWidget key={loginTurnstileReset} onVerify={setLoginTurnstileToken} onError={setError} /></div>
-              <button type="submit" disabled={sending || !isSupabaseConfigured || !loginTurnstileToken}
+              {!isResetMode && <label htmlFor="login-password" className="block"><span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">Password</span><input id="login-password" type="password" autoComplete={isSignUpMode ? "new-password" : "current-password"} minLength={isSignUpMode ? 8 : undefined} required value={password} onChange={(event) => setPassword(event.target.value)} className="min-h-12 w-full rounded-xl border border-border bg-white px-4 py-3 text-sm transition-all focus:border-[#C4562A] focus:outline-none focus:ring-4 focus:ring-[#C4562A]/8" /></label>}
+              {mode === "sign-in" && <div className="text-right"><button type="button" onClick={() => { setMode("reset"); setMessage(""); setError(""); }} className="text-xs font-semibold text-[#C4562A] hover:underline">Forgot password?</button></div>}
+              <button type="submit" disabled={sending || !isSupabaseConfigured}
                 className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#C4562A] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_24px_rgba(196,86,42,0.22)] transition-all hover:-translate-y-0.5 hover:bg-[#A8411B] hover:shadow-[0_14px_28px_rgba(196,86,42,0.26)] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#C4562A]/20 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0">
-                <Mail size={15} /> {sending ? "Sending your secure link…" : "Send me a magic link"}
+                <Mail size={15} /> {sending ? "Please wait…" : isResetMode ? "Send reset link" : isSignUpMode ? "Create account" : "Sign in"}
               </button>
             </form>
+
+            {!isAdminLogin && <p className="mt-5 text-center text-sm text-muted-foreground">
+              {isResetMode ? "Remembered your password?" : isSignUpMode ? "Already have an account?" : "New to Aunty Sala?"}{" "}
+              <button type="button" onClick={() => { setMode(isResetMode || isSignUpMode ? "sign-in" : "sign-up"); setMessage(""); setError(""); }} className="font-semibold text-[#C4562A] hover:underline">
+                {isResetMode || isSignUpMode ? "Sign in" : "Create an account"}
+              </button>
+            </p>}
 
             {message ? <p role="status" className="mt-4 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle size={17} className="mt-0.5 shrink-0" />{message}</p> : null}
             {error ? <p role="alert" className="mt-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={17} className="mt-0.5 shrink-0" />{error}</p> : null}
 
-            <div className="mt-6 flex items-start gap-2.5 rounded-xl bg-[#F3ECE2]/70 p-3 text-[11px] leading-relaxed text-muted-foreground"><CheckCircle size={15} className="mt-0.5 shrink-0 text-[#7A8C6E]" /><p>We use passwordless sign-in to protect your account. Your secure email link can only be used once.</p></div>
+            {!isResetMode && <div className="mt-6 flex items-start gap-2.5 rounded-xl bg-[#F3ECE2]/70 p-3 text-[11px] leading-relaxed text-muted-foreground"><CheckCircle size={15} className="mt-0.5 shrink-0 text-[#7A8C6E]" /><p>Use a unique password you don’t use on other sites. You can reset it by email if you forget it.</p></div>}
             <p className="mt-6 text-center text-[10px] leading-relaxed text-muted-foreground">By continuing, you agree to our <a href={isAdminLogin ? `${STORE_ORIGIN}/terms-of-service` : "/terms-of-service"} className="font-semibold text-[#C4562A] hover:underline">Terms of Service</a> and <a href={isAdminLogin ? `${STORE_ORIGIN}/privacy-policy` : "/privacy-policy"} className="font-semibold text-[#C4562A] hover:underline">Privacy Policy</a>.</p>
           </div>
         </section>
@@ -2753,22 +2804,15 @@ function ContactPage() {
   const [sent, setSent] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
-  const [contactTurnstileToken, setContactTurnstileToken] = useState("");
-  const [contactTurnstileReset, setContactTurnstileReset] = useState(0);
   const whatsappUrl = getWhatsAppUrl(settings, "Hello Aunty Sala Fashion Gh, I would like to make an enquiry.");
   const mapUrl = getGoogleMapsUrl(settings);
 
   const handleContactSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!contactTurnstileToken) {
-      setSendError("Complete the security verification before sending your message.");
-      return;
-    }
     const formData = new FormData(event.currentTarget);
     setSending(true);
     setSendError("");
     try {
-      await verifyTurnstileToken(contactTurnstileToken);
       await submitContactMessage({
         name: String(formData.get("name") ?? ""),
         email: String(formData.get("email") ?? ""),
@@ -2780,8 +2824,6 @@ function ContactPage() {
       setSendError(error instanceof Error ? error.message : "We couldn't send your message. Please try again.");
     } finally {
       setSending(false);
-      setContactTurnstileToken("");
-      setContactTurnstileReset((value) => value + 1);
     }
   };
   return (
@@ -2826,12 +2868,7 @@ function ContactPage() {
                 <label className="block text-xs font-semibold mb-1.5 uppercase tracking-wide text-muted-foreground">Message</label>
                 <textarea name="message" required rows={5} className="w-full border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-[#C4562A] resize-none" />
               </div>
-              <TurnstileWidget
-                key={contactTurnstileReset}
-                onVerify={setContactTurnstileToken}
-                onError={setSendError}
-              />
-              <button disabled={sending || !contactTurnstileToken} type="submit" className="w-full bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
+              <button disabled={sending} type="submit" className="w-full bg-[#C4562A] disabled:opacity-50 hover:bg-[#A8411B] text-white py-3.5 rounded-lg font-bold transition-colors flex items-center justify-center gap-2">
                 {sending ? "Sending…" : "Send Message"} <Send size={15}/>
               </button>
               {sendError && <p role="alert" className="text-sm text-red-600">{sendError}</p>}
@@ -4880,6 +4917,9 @@ export default function App() {
   const [adminError, setAdminError] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(
+    () => new URLSearchParams(window.location.search).get("passwordRecovery") === "1",
+  );
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
 
   useEffect(() => {
@@ -4942,7 +4982,8 @@ export default function App() {
       setAuthLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      if (event === "PASSWORD_RECOVERY") setIsPasswordRecovery(true);
       setSession(nextSession);
       setAuthLoading(false);
     });
@@ -5041,6 +5082,17 @@ export default function App() {
   const seoProduct = productSlug ? products.find((product) => product.slug === productSlug) : undefined;
 
   if (legacyAdminRedirect) return <FashionLoader label="Opening the admin portal…" />;
+
+  if (isPasswordRecovery) {
+    if (authLoading) return <FashionLoader label="Preparing password recovery…" />;
+    return <PasswordRecoveryPage onComplete={() => {
+      setIsPasswordRecovery(false);
+      const url = new URL(window.location.href);
+      url.searchParams.delete("passwordRecovery");
+      url.hash = "";
+      window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    }} />;
+  }
 
   if (isAdmin) {
     if (authLoading) return <FashionLoader label="Checking your session…" />;

@@ -131,9 +131,16 @@ Deno.serve(async (request) => {
   const channels = [emailConfigured && "email", whatsappConfigured && "whatsapp"].filter(Boolean) as string[];
 
   try {
-    const adminClient = createClient(Deno.env.get("SUPABASE_URL")!, envKey("secret"), { auth: { persistSession: false } });
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    if (!supabaseUrl) throw new Error("Supabase URL is not configured.");
+    const normalizedSupabaseUrl = supabaseUrl.replace(/\/+$/, "");
+    if (!/^https:\/\/[^/]+\.supabase\.co$/.test(normalizedSupabaseUrl)) {
+      return json({ processed: 0, configured: false });
+    }
+
+    const adminClient = createClient(normalizedSupabaseUrl, envKey("secret"), { auth: { persistSession: false } });
     const { error: configError } = await adminClient.rpc("configure_notification_dispatch", {
-      dispatch_url_input: `${Deno.env.get("SUPABASE_URL")!}/functions/v1/notification-dispatch`,
+      dispatch_url_input: `${normalizedSupabaseUrl}/functions/v1/notification-dispatch`,
       publishable_key_input: envKey("publishable"),
     });
     if (configError) throw configError;

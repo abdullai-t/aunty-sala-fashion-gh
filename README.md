@@ -19,9 +19,11 @@
 
   ### Authentication setup
 
-  In Supabase, open **Authentication → URL Configuration** and add your production `/account` URL plus your local development URL (for example `http://localhost:5173/account`) to the redirect allow list.
+  In Supabase, open **Authentication → URL Configuration** and add your production `/account` URL plus your local development URLs (for example `http://localhost:5173/account` and `http://localhost:5174/account`) to the redirect allow list. Also allow the password-recovery callbacks, such as `https://auntysalafashiongh.store/account?passwordRecovery=1` and the matching local callback URL.
 
-  Email magic-link authentication works through Supabase Auth email settings. To enable Google login, open **Authentication → Providers → Google**, enable it, and add the Google OAuth client ID and secret. Configure the callback URL shown by Supabase in your Google Cloud OAuth client.
+  Email/password sign-in, account creation, and password recovery use Supabase Auth email settings. Email confirmations must be enabled for new accounts. To enable Google login, open **Authentication → Providers → Google**, enable it, and add the Google OAuth client ID and secret. Configure the callback URL shown by Supabase in your Google Cloud OAuth client.
+
+  For local Paystack testing, put `PAYSTACK_SECRET_KEY` in `supabase/functions/.env` using a Paystack test secret, then restart the local Supabase stack. This file is gitignored; do not put server secrets in `VITE_` variables or commit them.
 
   Products and all dynamic store data load from Supabase. Custom orders, contact messages, checkout orders, addresses, wishlists, and Cloudinary media metadata are persisted there.
 

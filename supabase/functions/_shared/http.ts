@@ -24,7 +24,7 @@ export function envKey(name: "publishable" | "secret"): string {
 export function allowedCallbackUrl(value: unknown, allowedPaths = ["/checkout"]): string {
   if (typeof value !== "string") throw new Error("A payment callback URL is required.");
   const url = new URL(value);
-  const configured = (Deno.env.get("PAYMENT_CALLBACK_ORIGINS") ?? "http://localhost:5173,http://127.0.0.1:5173")
+  const configured = (Deno.env.get("PAYMENT_CALLBACK_ORIGINS") ?? "http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174")
     .split(",").map((origin) => origin.trim()).filter(Boolean);
   if (!configured.includes(url.origin) || !allowedPaths.includes(url.pathname)) {
     throw new Error("The payment callback URL is not allowed.");
