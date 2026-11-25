@@ -54,6 +54,7 @@ insert into public.product_media (product_id, media_id, alt_text, sort_order)
 select product_images.product_id, media_assets.id, product_images.alt_text, 0
 from product_images
 join public.media_assets on media_assets.public_id = product_images.public_id
+join public.products on products.id = product_images.product_id
 on conflict (product_id, media_id) do update
 set alt_text = excluded.alt_text,
     sort_order = 0;

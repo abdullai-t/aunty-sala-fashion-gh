@@ -1,3 +1,9 @@
+insert into public.categories (id, name, slug, description, sort_order)
+values
+  ('a1000000-0000-4000-8000-000000000001', 'Dresses', 'dresses', 'Contemporary dresses in Ghanaian fabrics.', 1),
+  ('a1000000-0000-4000-8000-000000000002', 'Sets', 'sets', 'Coordinated tops and bottoms.', 2)
+on conflict do nothing;
+
 insert into public.media_assets (
   public_id, secure_url, resource_type, format, width, height, bytes, original_filename
 ) values
