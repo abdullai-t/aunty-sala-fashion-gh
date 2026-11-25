@@ -25,7 +25,7 @@ const orderItems = (payload: Record<string, unknown>) => Array.isArray(payload.i
 function emailContent(notification: Notification): string {
   const payload = notification.payload;
   const customerName = escapeHtml(payload.customerName || "there");
-  const publicSiteUrl = (Deno.env.get("PUBLIC_SITE_URL") || "https://auntysalafashiongh.store").replace(/\/+$/, "");
+  const publicSiteUrl = (Deno.env.get("PUBLIC_SITE_URL") || "http://localhost:5174").replace(/\/+$/, "");
   const logoUrl = `${publicSiteUrl}/aunty-sala-logo.png`;
   let heading = notification.subject ?? "Aunty Sala Fashion Gh update";
   let content = "<p>We have an update for you.</p>";
